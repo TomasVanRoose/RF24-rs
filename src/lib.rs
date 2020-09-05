@@ -8,6 +8,8 @@ use register::Register;
 /// SPI mode
 pub const MODE: spi::Mode = spi::MODE_0;
 
+const MAX_PAYLOAD_SIZE: usize = 32;
+
 /// Error
 #[derive(Debug)]
 pub enum TransmissionError<E, F> {
@@ -22,6 +24,7 @@ pub enum TransmissionError<E, F> {
 pub struct Nrf24l01<SPI, NCS> {
     spi: SPI,
     ncs: NCS,
+    payload_size: usize,
 }
 
 type Result<T, E, F> = core::result::Result<T, TransmissionError<E, F>>;
@@ -31,8 +34,18 @@ where
     SPI: Transfer<u8, Error = SPIErr> + Write<u8, Error = SPIErr>,
     NCS: OutputPin<Error = PinErr>,
 {
-    pub fn new(spi: SPI, ncs: NCS) -> Self {
-        Nrf24l01 { spi, ncs }
+    pub fn new(spi: SPI, ncs: NCS, payload_size: usize) -> Self {
+        let mut chip = Nrf24l01 {
+            spi,
+            ncs,
+            payload_size: 0,
+        };
+        chip.set_payload_size(payload_size);
+        chip
+    }
+
+    pub fn set_payload_size(&mut self, payload_size: usize) {
+        self.payload_size = core::cmp::min(MAX_PAYLOAD_SIZE, payload_size);
     }
 
     fn write_register(&mut self, register: Register, value: u8) -> Result<(), SPIErr, PinErr> {
