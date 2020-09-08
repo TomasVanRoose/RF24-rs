@@ -9,14 +9,16 @@ use hal::{digital::v2::OutputPin, spi};
 
 pub mod config;
 pub mod register;
+pub mod status;
 
-use config::{DataRate, EncodingScheme, PALevel};
+use config::{DataPipe, DataRate, EncodingScheme, PALevel};
 use register::Register;
+use status::{FIFOStatus, Status};
 
 /// SPI mode
 pub const MODE: spi::Mode = spi::MODE_0;
 
-const MAX_PAYLOAD_SIZE: usize = 32;
+const MAX_PAYLOAD_SIZE: u8 = 32;
 
 /// Error
 #[derive(Debug)]
@@ -31,12 +33,15 @@ pub enum TransmissionError<E, F> {
     CommunicationError(u8),
 }
 
+#[derive(Debug)]
+pub struct NoDataAvailable;
+
 pub struct Nrf24l01<SPI, CE, NCS> {
     spi: SPI,
     ncs: NCS,
     ce: CE,
     config_reg: u8,
-    payload_size: usize,
+    payload_size: u8,
 }
 
 type Result<T, E, F> = core::result::Result<T, TransmissionError<E, F>>;
@@ -47,12 +52,14 @@ where
     NCS: OutputPin<Error = PinErr>,
     CE: OutputPin<Error = PinErr>,
 {
+    const MAX_ADDR_WIDTH: usize = 5;
+
     pub fn new<D>(
         spi: SPI,
         ce: CE,
         ncs: NCS,
         delay: &mut D,
-        payload_size: usize,
+        payload_size: u8,
     ) -> Result<Self, SPIErr, PinErr>
     where
         D: DelayMs<u8>,
@@ -64,6 +71,8 @@ where
             config_reg: 0,
             payload_size: 0,
         };
+
+        chip.set_payload_size(payload_size);
 
         // Set the output pins to the correct levels
         chip.ce.set_low().map_err(TransmissionError::Pin)?;
@@ -103,7 +112,7 @@ where
         }
     }
 
-    /// Power up now
+    /// Power up now.
     ///
     /// # Examples
     /// ```rust
@@ -123,7 +132,38 @@ where
         Ok(())
     }
 
-    /// Setup of automatic retransmission
+    /// Check whether there are any bytes available to be read.
+    ///
+    /// When data is available, this function returns the data pipe where the data can be read.
+    /// If no data is available in any of the pipes, it returns `Err(NoDataAvailable)`
+    pub fn available(
+        &mut self,
+    ) -> Result<core::result::Result<DataPipe, NoDataAvailable>, SPIErr, PinErr> {
+        let fifo_status = self
+            .read_register(Register::FIFO_STATUS)
+            .map(FIFOStatus::from)?;
+
+        if !fifo_status.rx_empty() {
+            return self.status().map(|s| Ok(s.data_pipe()));
+        }
+
+        Ok(Err(NoDataAvailable))
+    }
+
+    /// Read the available payload
+    pub fn read(&mut self, buf: &mut [u8], len: usize) -> Result<(), SPIErr, PinErr> {
+        Ok(())
+    }
+
+    pub fn open_writing_pipe(&mut self, mut addr: &[u8]) -> Result<(), SPIErr, PinErr> {
+        if addr.len() > Self::MAX_ADDR_WIDTH {
+            addr = &addr[0..Self::MAX_ADDR_WIDTH - 1];
+        }
+        self.write_register(register, value)
+        Ok(())
+    }
+
+    /// Setup of automatic retransmission.
     ///
     /// # Arguments
     /// * `delay` is the auto retransmit delay.
@@ -144,7 +184,7 @@ where
         self.write_register(Register::SETUP_RETR, (delay << 4) | (count))
     }
 
-    /// Set the frequency channel nRF24L01 operates on
+    /// Set the frequency channel nRF24L01 operates on.
     ///
     /// # Arguments
     ///
@@ -158,7 +198,7 @@ where
         self.write_register(Register::RF_CH, (0xf >> 1) & channel)
     }
 
-    /// Flush transmission FIFO, used in TX mode
+    /// Flush transmission FIFO, used in TX mode.
     ///
     /// # Examples
     /// ```rust
@@ -168,7 +208,7 @@ where
         self.send_command(Instruction::FTX).map(|_| ())
     }
 
-    /// Flush reciever FIFO, used in RX mode
+    /// Flush reciever FIFO, used in RX mode.
     ///
     /// # Examples
     /// ```rust
@@ -178,9 +218,9 @@ where
         self.send_command(Instruction::FRX).map(|_| ())
     }
 
-    /// Enable CRC encoding scheme
+    /// Enable CRC encoding scheme.
     ///
-    /// **Note** that this configures the nrf24l01 in transmit mode
+    /// **Note** that this configures the nrf24l01 in transmit mode.
     ///
     /// # Examples
     /// ```rust
@@ -190,14 +230,17 @@ where
         self.write_register(Register::CONFIG, (1 << 3) | (scheme.scheme() << 2))
     }
 
+    /// Configure the data rate and PA level.
     pub fn configure(&mut self, data_rate: DataRate, level: PALevel) -> Result<(), SPIErr, PinErr> {
         self.setup_rf(data_rate, level)
     }
 
-    pub fn set_payload_size(&mut self, payload_size: usize) {
+    /// Set the payload size.
+    pub fn set_payload_size(&mut self, payload_size: u8) {
         self.payload_size = core::cmp::min(MAX_PAYLOAD_SIZE, payload_size);
     }
 
+    /// Read status from device.
     pub fn status(&mut self) -> Result<Status, SPIErr, PinErr> {
         self.send_command(Instruction::NOP)
     }
@@ -263,55 +306,5 @@ enum Instruction {
 impl Instruction {
     pub(crate) fn opcode(&self) -> u8 {
         *self as u8
-    }
-}
-
-#[derive(Copy, Clone, Eq, PartialEq)]
-pub struct Status(u8);
-
-impl From<u8> for Status {
-    fn from(t: u8) -> Self {
-        Status(t)
-    }
-}
-
-impl Status {
-    fn is_valid(&self) -> bool {
-        (self.0 & (1 << 7)) == 0
-    }
-    fn data_ready(&self) -> bool {
-        (self.0 & (1 << 6)) != 0
-    }
-    fn data_sent(&self) -> bool {
-        (self.0 & (1 << 5)) != 0
-    }
-    fn reached_max_retries(&self) -> bool {
-        (self.0 & (1 << 4)) != 0
-    }
-    fn data_pipe_nr(&self) -> u8 {
-        (self.0 >> 5) & 111
-    }
-    fn tx_full(&self) -> bool {
-        (self.0 & 1) != 0
-    }
-}
-
-use ufmt::{uDebug, uWrite, Formatter};
-impl uDebug for Status {
-    fn fmt<W: ?Sized>(&self, f: &mut Formatter<'_, W>) -> core::result::Result<(), W::Error>
-    where
-        W: uWrite,
-    {
-        if !&self.is_valid() {
-            f.write_str("Invalid status. Something went wrong during communication with nrf24l01")
-        } else {
-            let mut s = f.debug_struct("Status")?;
-            let s = s.field("Data ready", &self.data_ready())?;
-            let s = s.field("Data sent", &self.data_sent())?;
-            let s = s.field("Reached max retries", &self.reached_max_retries())?;
-            let s = s.field("Data pipe nr", &self.data_pipe_nr())?;
-            let s = s.field("Transmission FIFO full", &self.tx_full())?;
-            s.finish()
-        }
     }
 }

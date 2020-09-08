@@ -1,3 +1,9 @@
+pub struct Config {
+    reg: u8,
+    payload_size: u8,
+    addr_width: u8,
+}
+
 /// Different RF output power adjustment levels
 ///
 /// Defaults to Min
@@ -60,5 +66,60 @@ pub enum EncodingScheme {
 impl EncodingScheme {
     pub(crate) fn scheme(&self) -> u8 {
         *self as u8
+    }
+}
+
+/// Representation of the different data pipes through which data can be received
+///
+/// An nRF24L01 configured as primary RX (PRX) will be able to receive data trough 6 different data
+/// pipes.
+/// One data pipe will have a unique address but share the same frequency channel.
+/// This means that up to 6 different nRF24L01 configured as primary TX (PTX) can communicate with
+/// one nRF24L01 configured as PRX, and the nRF24L01 configured as PRX will be able to distinguish
+/// between them.
+///
+/// The default assumed data pipe is 0.
+///
+/// Data pipe 0 has a unique 40 bit configurable address. Each of data pipe 1-5 has an 8 bit unique
+/// address and shares the 32 most significant address bits.
+///
+/// # Notes
+/// In the PTX device data pipe 0 is used to received the acknowledgement, and therefore the
+/// receive address for data pipe 0 has to be equal to the transmit address to be able to receive
+/// the acknowledgement.
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[repr(u8)]
+pub enum DataPipe {
+    DP0 = 0,
+    DP1 = 1,
+    DP2 = 2,
+    DP3 = 3,
+    DP4 = 4,
+    DP5 = 5,
+}
+
+impl DataPipe {
+    pub(crate) fn pipe(&self) -> u8 {
+        *self as u8
+    }
+}
+
+impl Default for DataPipe {
+    fn default() -> Self {
+        DataPipe::DP0
+    }
+}
+
+impl From<u8> for DataPipe {
+    fn from(t: u8) -> Self {
+        match t {
+            0 => DataPipe::DP0,
+            1 => DataPipe::DP1,
+            2 => DataPipe::DP2,
+            3 => DataPipe::DP3,
+            4 => DataPipe::DP4,
+            5 => DataPipe::DP5,
+            _ => DataPipe::DP0,
+        }
     }
 }
