@@ -33,9 +33,6 @@ pub enum TransmissionError<E, F> {
     CommunicationError(u8),
 }
 
-#[derive(Debug)]
-pub struct NoDataAvailable;
-
 pub struct Nrf24l01<SPI, CE, NCS> {
     spi: SPI,
     ncs: NCS,
@@ -134,22 +131,22 @@ where
         Ok(())
     }
 
-    /// Check whether there are any bytes available to be read.
-    ///
-    /// When data is available, this function returns the data pipe where the data can be read.
-    /// If no data is available in any of the pipes, it returns `Err(NoDataAvailable)`
-    pub fn available(
-        &mut self,
-    ) -> Result<core::result::Result<DataPipe, NoDataAvailable>, SPIErr, PinErr> {
+    /// Check if there are any bytes available to be read.
+    pub fn data_available(&mut self) -> Result<bool, SPIErr, PinErr> {
         let fifo_status = self
             .read_register(Register::FIFO_STATUS)
             .map(FIFOStatus::from)?;
 
-        if !fifo_status.rx_empty() {
-            return self.status().map(|s| Ok(s.data_pipe()));
-        }
+        Ok(!fifo_status.rx_empty())
+    }
 
-        Ok(Err(NoDataAvailable))
+    /// Returns the data pipe where the data is available and `None` if no data available.
+    pub fn data_available_on_pipe(&mut self) -> Result<Option<DataPipe>, SPIErr, PinErr> {
+        if self.data_available()? {
+            self.status().map(|s| Some(s.data_pipe()))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Read the available payload
