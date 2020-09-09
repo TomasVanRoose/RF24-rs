@@ -42,6 +42,7 @@ pub struct Nrf24l01<SPI, CE, NCS> {
     ce: CE,
     config_reg: u8,
     payload_size: u8,
+    tx_buf: [u8; MAX_PAYLOAD_SIZE as usize + 1],
 }
 
 type Result<T, E, F> = core::result::Result<T, TransmissionError<E, F>>;
@@ -70,6 +71,7 @@ where
             ce,
             config_reg: 0,
             payload_size: 0,
+            tx_buf: [0; MAX_PAYLOAD_SIZE as usize + 1],
         };
 
         chip.set_payload_size(payload_size);
@@ -157,9 +159,12 @@ where
 
     pub fn open_writing_pipe(&mut self, mut addr: &[u8]) -> Result<(), SPIErr, PinErr> {
         if addr.len() > Self::MAX_ADDR_WIDTH {
-            addr = &addr[0..Self::MAX_ADDR_WIDTH - 1];
+            addr = &addr[0..Self::MAX_ADDR_WIDTH];
         }
-        self.write_register(register, value)
+        self.write_mult_register(Register::TX_ADDR, addr)?;
+        self.write_mult_register(Register::RX_ADDR_P0, addr)?;
+
+        self.write_register(Register::RX_PW_P0, self.payload_size)?;
         Ok(())
     }
 
@@ -260,6 +265,26 @@ where
         let buffer = [Instruction::WR.opcode() | register.addr(), value];
         self.ncs.set_low().map_err(TransmissionError::Pin)?;
         self.spi.write(&buffer).map_err(TransmissionError::Spi)?;
+        self.ncs.set_high().map_err(TransmissionError::Pin)?;
+
+        Ok(())
+    }
+
+    fn write_mult_register(
+        &mut self,
+        register: Register,
+        values: &[u8],
+    ) -> Result<(), SPIErr, PinErr> {
+        // Use tx buffer to copy the values into
+        // First byte will be the opcode
+        self.tx_buf[0] = Instruction::WR.opcode() | register.addr();
+        // Copy over the values
+        self.tx_buf[1..values.len() + 1].copy_from_slice(values);
+        // Write to spi
+        self.ncs.set_low().map_err(TransmissionError::Pin)?;
+        self.spi
+            .write(&self.tx_buf[..values.len() + 1])
+            .map_err(TransmissionError::Spi)?;
         self.ncs.set_high().map_err(TransmissionError::Pin)?;
 
         Ok(())
