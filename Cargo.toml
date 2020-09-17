@@ -1,8 +1,9 @@
 [package]
-name = "nRF24L01"
+name = "nrf24_l01"
 version = "0.1.0"
 authors = ["Tomas Van Roose <tomas.vanroose@gmail.com>"]
 edition = "2018"
+license = "Apache-2.0"
 
 [dependencies]
 embedded-hal = "0.2"
