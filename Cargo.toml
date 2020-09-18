@@ -1,9 +1,18 @@
 [package]
-name = "nrf24_l01"
+name = "RF24-rs"
 version = "0.1.0"
 authors = ["Tomas Van Roose <tomas.vanroose@gmail.com>"]
-edition = "2018"
+repository = "https://github.com/TomasVanRoose/RF24-rs"
 license = "Apache-2.0"
+
+description = "Platform agnostic Rust driver for the nRF24L01 2.4 GHz transciever for wireless communication between embedded devices."
+keywords = ["rust", "driver", "nRF24L01", "wireless", "embedded", "embedded-hal", "embedded-hal-driver", "2.4ghz", "iot"]
+categories = ["embedded", "hardware-support", "no-std"]
+
+homepage = "https://github.com/TomasVanRoose/RF24-rs"
+readme = "README.md"
+edition = "2018"
+
 
 [dependencies]
 embedded-hal = "0.2"
