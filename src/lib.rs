@@ -24,7 +24,7 @@ pub mod status;
 
 pub use crate::error::Error;
 pub use crate::nrf24::Nrf24l01;
-pub use crate::register_acces::Register;
+//pub use crate::register_acces::Register;
 
 /// SPI mode
 pub const MODE: spi::Mode = spi::MODE_0;

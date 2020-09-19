@@ -147,8 +147,11 @@ where
             addr = &addr[0..Self::MAX_ADDR_WIDTH];
         }
         self.write_mult_register(Register::TX_ADDR, addr)?;
+        // We need to open Reading Pipe 0 with the same address name
+        // because ACK messages will be recieved on this channel
         self.write_mult_register(Register::RX_ADDR_P0, addr)?;
 
+        // set payload size
         self.write_register(Register::RX_PW_P0, self.payload_size)?;
         Ok(())
     }
@@ -158,15 +161,20 @@ where
         &mut self,
         delay: &mut D,
         buf: &[u8],
-    ) -> Result<usize, SPIErr, PinErr> {
+    ) -> Result<(), SPIErr, PinErr> {
         // Can transmit a max of `payload_size` bytes
         let len = core::cmp::min(buf.len(), self.payload_size as usize);
 
-        //self.tx_buf[0] = self.ce.set_high().map_err(Error::Pin)?;
+        // Copy data over to tx fifo
+        let _status = self.send_command_bytes(Instruction::WTX, &buf[..=len])?;
+
+        // Start transmission:
+        // pulse CE pin to signal transmission start
+        self.ce.set_high().map_err(Error::Pin)?;
         delay.delay_us(10);
         self.ce.set_low().map_err(Error::Pin)?;
 
-        unimplemented!()
+        Ok(())
     }
 
     /// Setup of automatic retransmission.
@@ -242,6 +250,8 @@ where
     }
 
     /// Set the payload size.
+    ///
+    /// Values bigger than [MAX_PAYLOAD_SIZE](MAX_PAYLOAD_SIZE) will be set to the maximum
     pub fn set_payload_size(&mut self, payload_size: u8) {
         self.payload_size = core::cmp::min(MAX_PAYLOAD_SIZE, payload_size);
     }
@@ -256,36 +266,52 @@ where
     /// Returns the status recieved from the device.
     /// Normally used for the other instructions then read and write.  
     fn send_command(&mut self, instruction: Instruction) -> Result<Status, SPIErr, PinErr> {
-        let mut buffer = [instruction.opcode()];
-        self.ncs.set_low().map_err(Error::Pin)?;
-        let r = self.spi.transfer(&mut buffer).map_err(Error::Spi);
-        self.ncs.set_high().map_err(Error::Pin)?;
-        r.map(|s| Status::from(s[0]))
+        self.send_command_bytes(instruction, &[])
     }
 
+    // Sends an instruction with some payload data over the SPI bus
+    //
+    // Returns the status from the device
+    fn send_command_bytes(
+        &mut self,
+        instruction: Instruction,
+        buf: &[u8],
+    ) -> Result<Status, SPIErr, PinErr> {
+        // Use tx buffer to copy the values into
+        // First byte will be the opcode
+        self.tx_buf[0] = instruction.opcode();
+        self.tx_buf[1..=buf.len()].copy_from_slice(buf);
+        // Write to spi
+        self.ncs.set_low().map_err(Error::Pin)?;
+        let r = self
+            .spi
+            .transfer(&mut self.tx_buf[..=buf.len()])
+            .map_err(Error::Spi)?;
+        self.ncs.set_high().map_err(Error::Pin)?;
+
+        Ok(Status::from(r[0]))
+    }
+
+    /// Writes a value to a given register
     fn write_register(&mut self, register: Register, value: u8) -> Result<(), SPIErr, PinErr> {
-        let buffer = [Instruction::WR.opcode() | register.addr(), value];
-        self.ncs.set_low().map_err(Error::Pin)?;
-        self.spi.write(&buffer).map_err(Error::Spi)?;
-        self.ncs.set_high().map_err(Error::Pin)?;
-
-        Ok(())
+        self.write_mult_register(register, &[value])
     }
 
+    /// Writes a byte array to a given register
     fn write_mult_register(
         &mut self,
         register: Register,
-        values: &[u8],
+        buf: &[u8],
     ) -> Result<(), SPIErr, PinErr> {
         // Use tx buffer to copy the values into
         // First byte will be the opcode
         self.tx_buf[0] = Instruction::WR.opcode() | register.addr();
         // Copy over the values
-        self.tx_buf[1..values.len() + 1].copy_from_slice(values);
+        self.tx_buf[1..=buf.len()].copy_from_slice(buf);
         // Write to spi
         self.ncs.set_low().map_err(Error::Pin)?;
         self.spi
-            .write(&self.tx_buf[..values.len() + 1])
+            .write(&self.tx_buf[..=buf.len()])
             .map_err(Error::Spi)?;
         self.ncs.set_high().map_err(Error::Pin)?;
 
