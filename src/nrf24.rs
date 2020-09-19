@@ -34,6 +34,7 @@ where
 {
     const MAX_ADDR_WIDTH: usize = 5;
     const CORRECT_CONFIG: u8 = 0b00001110;
+    const STATUS_RESET: u8 = 0b01110000;
 
     /// Creates a new nrf24l01 driver.
     pub fn new<D>(
@@ -73,7 +74,7 @@ where
         // Set rf
         chip.setup_rf(DataRate::default(), PALevel::default())?;
         // Reset status
-        chip.write_register(Register::STATUS, 0b01111110)?;
+        chip.reset_status()?;
         // Set up default configuration.  Callers can always change it later.
         // This channel should be universally safe and not bleed over into adjacent spectrum.
         chip.set_channel(76)?;
@@ -132,6 +133,52 @@ where
         } else {
             Ok(None)
         }
+    }
+
+    /// Opens a reading pipe.
+    ///
+    /// Call this before calling [start_listening()]().
+    pub fn open_reading_pipe(&mut self, mut addr: &[u8]) -> Result<(), SPIErr, PinErr> {
+        if addr.len() > Self::MAX_ADDR_WIDTH {
+            addr = &addr[0..Self::MAX_ADDR_WIDTH];
+        }
+        self.write_mult_register(Register::RX_ADDR_P0, addr)?;
+
+        // Enable RX Addr 0
+        let old_reg = self.read_register(Register::EN_RXADDR)?;
+        self.write_register(Register::EN_RXADDR, old_reg | 1)?;
+
+        // set payload size
+        self.write_register(Register::RX_PW_P0, self.payload_size)?;
+        Ok(())
+    }
+
+    /// Starts listening on the pipes that are opened for reading.
+    ///
+    /// Make sure [open_reading_pipe()]() is called first.
+    ///
+    /// TODO: Use the type system to make start and stop listening by RAII and Drop
+    pub fn start_listening(&mut self) -> Result<(), SPIErr, PinErr> {
+        // Enable RX listening flag
+        self.config_reg |= 1;
+        self.write_register(Register::CONFIG, self.config_reg)?;
+        // Flush interrupts
+        self.reset_status()?;
+
+        self.ce.set_high().map_err(Error::Pin)?;
+
+        Ok(())
+    }
+    /// Stop listening.
+    ///
+    /// TODO: Use the type system to make start and stop listening by RAII and Drop
+    pub fn stop_listening(&mut self) -> Result<(), SPIErr, PinErr> {
+        self.ce.set_low().map_err(Error::Pin)?;
+
+        self.config_reg &= !0b1;
+        self.write_register(Register::CONFIG, self.config_reg)?;
+
+        Ok(())
     }
 
     /// Read the available payload
@@ -256,9 +303,17 @@ where
         self.payload_size = core::cmp::min(MAX_PAYLOAD_SIZE, payload_size);
     }
 
-    /// Read status from device.
+    /// Reads the status register from device.
     pub fn status(&mut self) -> Result<Status, SPIErr, PinErr> {
         self.send_command(Instruction::NOP)
+    }
+
+    /// Resets the following flags in the status register:
+    /// - data ready RX fifo interrupt
+    /// - data sent TX fifo interrupt
+    /// - maximum number of number of retries interrupt
+    pub fn reset_status(&mut self) -> Result<(), SPIErr, PinErr> {
+        self.write_register(Register::STATUS, Self::STATUS_RESET)
     }
 
     /// Sends an instruction over the SPI bus without extra data.
