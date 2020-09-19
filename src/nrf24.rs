@@ -182,7 +182,23 @@ where
     }
 
     /// Read the available payload
-    pub fn read(&mut self, buf: &mut [u8], len: usize) -> Result<(), SPIErr, PinErr> {
+    pub fn read(&mut self, buf: &mut [u8]) -> Result<(), SPIErr, PinErr> {
+        let len = core::cmp::min(buf.len(), self.payload_size as usize);
+
+        // Use tx buffer to copy the values into
+        // First byte will be the opcode
+        self.tx_buf[0] = Instruction::RRX.opcode();
+        // Write to spi
+        self.ncs.set_low().map_err(Error::Pin)?;
+        let r = self
+            .spi
+            .transfer(&mut self.tx_buf[..=len])
+            .map_err(Error::Spi)?;
+        self.ncs.set_high().map_err(Error::Pin)?;
+
+        // Transfer the data read to buf
+        buf.copy_from_slice(&r[1..=len]);
+
         Ok(())
     }
 
