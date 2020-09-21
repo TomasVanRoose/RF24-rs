@@ -90,11 +90,20 @@ impl EncodingScheme {
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 #[repr(u8)]
 pub enum DataPipe {
+    /// Data pipe 0.
+    /// Default pipe with a 40 bit configurable address.
+    /// This pipe is used in TX mode when auto acknowledgement is enabled. On this channel the ACK
+    /// messages are received.
     DP0 = 0,
+    /// Data pipe 1.
     DP1 = 1,
+    /// Data pipe 2.
     DP2 = 2,
+    /// Data pipe 3.
     DP3 = 3,
+    /// Data pipe 4.
     DP4 = 4,
+    /// Data pipe 5.
     DP5 = 5,
 }
 

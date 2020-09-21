@@ -190,14 +190,15 @@ where
         self.tx_buf[0] = Instruction::RRX.opcode();
         // Write to spi
         self.ncs.set_low().map_err(Error::Pin)?;
-        let r = self
+        let _ = self
             .spi
             .transfer(&mut self.tx_buf[..=len])
             .map_err(Error::Spi)?;
         self.ncs.set_high().map_err(Error::Pin)?;
 
-        // Transfer the data read to buf
-        buf.copy_from_slice(&r[1..=len]);
+        // Transfer the data read to buf.
+        // Skip first byte because it contains the command
+        buf.copy_from_slice(&self.tx_buf[1..len]);
 
         Ok(())
     }
@@ -229,7 +230,7 @@ where
         let len = core::cmp::min(buf.len(), self.payload_size as usize);
 
         // Copy data over to tx fifo
-        let _status = self.send_command_bytes(Instruction::WTX, &buf[..=len])?;
+        let _status = self.send_command_bytes(Instruction::WTX, &buf[..len])?;
 
         // Start transmission:
         // pulse CE pin to signal transmission start
