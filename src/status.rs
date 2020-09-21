@@ -1,4 +1,6 @@
 use crate::config::DataPipe;
+#[cfg(feature = "micro-format")]
+use ufmt::{uDebug, uWrite, Formatter};
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub struct Status(u8);
@@ -61,7 +63,7 @@ impl From<u8> for FIFOStatus {
     }
 }
 
-use ufmt::{uDebug, uWrite, Formatter};
+#[cfg(feature = "micro-format")]
 impl uDebug for Status {
     fn fmt<W: ?Sized>(&self, f: &mut Formatter<'_, W>) -> core::result::Result<(), W::Error>
     where

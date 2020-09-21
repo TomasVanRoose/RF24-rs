@@ -13,7 +13,10 @@ homepage = "https://github.com/TomasVanRoose/RF24-rs"
 readme = "README.md"
 edition = "2018"
 
+[features]
+mirco-fmt = ["ufmt"]
 
 [dependencies]
 embedded-hal = "0.2"
-ufmt = "0.1"
+# Feature dependencies
+ufmt = { version = "0.1", optional = true }
