@@ -1,6 +1,6 @@
 //! Different structs and values for configuration of the chip
 
-#[cfg(feature = "micro-format")]
+#[cfg(feature = "micro-fmt")]
 use ufmt::{uDebug, uWrite, Formatter};
 
 /// Different RF output power adjustment levels
@@ -132,7 +132,7 @@ impl From<u8> for DataPipe {
     }
 }
 
-#[cfg(feature = "micro-format")]
+#[cfg(feature = "micro-fmt")]
 impl uDebug for DataPipe {
     fn fmt<W: ?Sized>(&self, f: &mut Formatter<'_, W>) -> core::result::Result<(), W::Error>
     where

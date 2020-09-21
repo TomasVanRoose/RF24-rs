@@ -14,7 +14,7 @@ readme = "README.md"
 edition = "2018"
 
 [features]
-mirco-fmt = ["ufmt"]
+micro-fmt = ["ufmt"]
 
 [dependencies]
 embedded-hal = "0.2"
