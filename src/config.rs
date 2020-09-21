@@ -1,8 +1,4 @@
-pub struct Config {
-    reg: u8,
-    payload_size: u8,
-    addr_width: u8,
-}
+//! Different structs and values for configuration of the chip
 
 /// Different RF output power adjustment levels
 ///
@@ -129,6 +125,23 @@ impl From<u8> for DataPipe {
             4 => DataPipe::DP4,
             5 => DataPipe::DP5,
             _ => DataPipe::DP0,
+        }
+    }
+}
+
+use ufmt::{uDebug, uWrite, Formatter};
+impl uDebug for DataPipe {
+    fn fmt<W: ?Sized>(&self, f: &mut Formatter<'_, W>) -> core::result::Result<(), W::Error>
+    where
+        W: uWrite,
+    {
+        match *self {
+            DataPipe::DP0 => f.write_str("Data pipe 0"),
+            DataPipe::DP1 => f.write_str("Data pipe 1"),
+            DataPipe::DP2 => f.write_str("Data pipe 2"),
+            DataPipe::DP3 => f.write_str("Data pipe 3"),
+            DataPipe::DP4 => f.write_str("Data pipe 4"),
+            DataPipe::DP5 => f.write_str("Data pipe 5"),
         }
     }
 }
