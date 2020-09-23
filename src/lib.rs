@@ -1,8 +1,22 @@
-//! This is a platform agnostic Rust driver for the nRF24L01 single
-//! chip 2.4G Hz transceiver by Nordic Semiconduct for communicating
-//! data wirelessly using the [`embedded-hal`] traits.
+//! This crate provides a platform agnostic Rust driver for the nRF24L01 single chip 2.4 GHz
+//! transceiver by Nordic Semiconduct for communicating data wirelessly using the [`embedded-hal`] traits.
 //!
 //! [`embedded-hal`]: https://github.com/rust-embedded/embedded-hal
+//!
+//! # Usage
+//!
+//! This crate can be used by adding `rf24-rs` to your dependencies in your project's `Cargo.toml`.
+//!
+//! ```toml
+//! [dependencies]
+//! rf24-rs = "0.1"
+//! ```
+//!
+//! # Examples
+//!
+//! # Feature-flags
+//!
+//! - **micro-fmt:** provides a `uDebug` implementation from the [ufmt crate](https://docs.rs/ufmt) for all public structs and enums.
 #![warn(
     missing_docs,
     missing_copy_implementations,
@@ -15,15 +29,16 @@
 extern crate embedded_hal as hal;
 use crate::hal::spi;
 
+mod config;
 mod error;
 mod nrf24;
 mod register_acces;
+mod status;
 
-pub mod config;
-pub mod status;
-
+pub use crate::config::{DataPipe, DataRate, PALevel};
 pub use crate::error::Error;
 pub use crate::nrf24::Nrf24l01;
+pub use crate::status::{FIFOStatus, Status};
 //pub use crate::register_acces::Register;
 
 /// SPI mode
