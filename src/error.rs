@@ -1,4 +1,4 @@
-/// Error
+/// Errors that can occur when sending and receiving data.
 #[derive(Debug)]
 pub enum Error<CommE, PinE> {
     /// SPI communication error

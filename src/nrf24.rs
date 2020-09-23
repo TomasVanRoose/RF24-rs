@@ -1,4 +1,4 @@
-//! nRF24 implementations
+//! nRF24 implementations.
 
 use crate::config::{DataPipe, DataRate, EncodingScheme, PALevel};
 use crate::error::Error;
@@ -14,7 +14,7 @@ use core::fmt;
 
 const MAX_PAYLOAD_SIZE: u8 = 32;
 
-/// nRF24L01 Driver
+/// nRF24L01 Driver.
 pub struct Nrf24l01<SPI, CE, NCS> {
     spi: SPI,
     ncs: NCS,

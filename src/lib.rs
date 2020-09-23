@@ -41,5 +41,5 @@ pub use crate::nrf24::Nrf24l01;
 pub use crate::status::{FIFOStatus, Status};
 //pub use crate::register_acces::Register;
 
-/// SPI mode
+/// SPI mode. Use this when initializing the SPI instance.
 pub const MODE: spi::Mode = spi::MODE_0;

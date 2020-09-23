@@ -3,9 +3,10 @@
 #[cfg(feature = "micro-fmt")]
 use ufmt::{uDebug, uWrite, Formatter};
 
-/// Different RF output power adjustment levels
+/// Different RF power levels. The higher the level the bigger range, but the more the current
+/// consumption.
 ///
-/// Defaults to Min
+/// Defaults to Min.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum PALevel {
     /// -18 dBm, 7 mA current consumption.
@@ -30,9 +31,9 @@ impl Default for PALevel {
     }
 }
 
-/// Data rate at which to send
+/// Configured speed at which data will be sent.
 ///
-/// Defaults to 2Mpbs
+/// Defaults to 2Mpbs.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum DataRate {
     /// 1 Mbps
