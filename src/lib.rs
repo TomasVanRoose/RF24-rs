@@ -43,3 +43,5 @@ pub use crate::status::{FIFOStatus, Status};
 
 /// SPI mode. Use this when initializing the SPI instance.
 pub const MODE: spi::Mode = spi::MODE_0;
+/// Max size in bytes of a single payload to be sent or recieved.
+pub const MAX_PAYLOAD_SIZE: u8 = 32;

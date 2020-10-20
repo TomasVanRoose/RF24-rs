@@ -10,9 +10,8 @@ use crate::hal::blocking::{
 use crate::hal::digital::v2::OutputPin;
 use crate::register_acces::{Instruction, Register};
 use crate::status::{FIFOStatus, Status};
+use crate::MAX_PAYLOAD_SIZE;
 use core::fmt;
-
-const MAX_PAYLOAD_SIZE: u8 = 32;
 
 /// nRF24L01 Driver.
 pub struct Nrf24l01<SPI, CE, NCS> {
@@ -137,12 +136,12 @@ where
 
     /// Opens a reading pipe.
     ///
-    /// Call this before calling [start_listening()]().
+    /// Call this before calling [start_listening()](#method.start_listening).
     pub fn open_reading_pipe(&mut self, mut addr: &[u8]) -> Result<(), SPIErr, PinErr> {
         if addr.len() > Self::MAX_ADDR_WIDTH {
             addr = &addr[0..Self::MAX_ADDR_WIDTH];
         }
-        self.write_mult_register(Register::RX_ADDR_P0, addr)?;
+        self.write_register(Register::RX_ADDR_P0, addr)?;
 
         // Enable RX Addr 0
         let old_reg = self.read_register(Register::EN_RXADDR)?;
@@ -155,7 +154,7 @@ where
 
     /// Starts listening on the pipes that are opened for reading.
     ///
-    /// Make sure [open_reading_pipe()]() is called first.
+    /// Make sure [open_reading_pipe()](#method.open_reading_pipe) is called first.
     ///
     /// TODO: Use the type system to make start and stop listening by RAII and Drop
     pub fn start_listening(&mut self) -> Result<(), SPIErr, PinErr> {
@@ -212,10 +211,10 @@ where
         if addr.len() > Self::MAX_ADDR_WIDTH {
             addr = &addr[0..Self::MAX_ADDR_WIDTH];
         }
-        self.write_mult_register(Register::TX_ADDR, addr)?;
+        self.write_register(Register::TX_ADDR, addr)?;
         // We need to open Reading Pipe 0 with the same address name
         // because ACK messages will be recieved on this channel
-        self.write_mult_register(Register::RX_ADDR_P0, addr)?;
+        self.write_register(Register::RX_ADDR_P0, addr)?;
 
         // set payload size
         self.write_register(Register::RX_PW_P0, self.payload_size)?;
@@ -317,7 +316,7 @@ where
 
     /// Set the payload size.
     ///
-    /// Values bigger than [MAX_PAYLOAD_SIZE](MAX_PAYLOAD_SIZE) will be set to the maximum
+    /// Values bigger than [MAX_PAYLOAD_SIZE](constant.MAX_PAYLOAD_SIZE.html) will be set to the maximum
     pub fn set_payload_size(&mut self, payload_size: u8) {
         self.payload_size = core::cmp::min(MAX_PAYLOAD_SIZE, payload_size);
     }
@@ -366,17 +365,18 @@ where
         Ok(Status::from(r[0]))
     }
 
-    /// Writes a value to a given register
-    fn write_register(&mut self, register: Register, value: u8) -> Result<(), SPIErr, PinErr> {
-        self.write_mult_register(register, &[value])
-    }
-
-    /// Writes a byte array to a given register
-    fn write_mult_register(
+    /// Writes values to a given register.
+    ///
+    /// This can be anything that can be turned into a buffer of u8's.
+    /// `IntoBuf` is currently implemented for T and for &[T].
+    /// This means that this function can be polymorphically called for single value writes as well
+    /// as for arrays.
+    fn write_register<T: IntoBuf<u8>>(
         &mut self,
         register: Register,
-        buf: &[u8],
+        buf: T,
     ) -> Result<(), SPIErr, PinErr> {
+        let buf = buf.into_buf();
         // Use tx buffer to copy the values into
         // First byte will be the opcode
         self.tx_buf[0] = Instruction::WR.opcode() | register.addr();
@@ -424,5 +424,23 @@ where
             .field("payload_size", &self.payload_size)
             .field("tx_buf", &&self.tx_buf[1..])
             .finish()
+    }
+}
+
+/// A trait representing a type that can be turned into a buffer.
+///
+/// Is used for representing single values as well as slices as buffers.
+trait IntoBuf<T> {
+    fn into_buf(&self) -> &[T];
+}
+
+impl<T> IntoBuf<T> for T {
+    fn into_buf(&self) -> &[T] {
+        core::slice::from_ref(self)
+    }
+}
+impl<T> IntoBuf<T> for &[T] {
+    fn into_buf(&self) -> &[T] {
+        self
     }
 }
