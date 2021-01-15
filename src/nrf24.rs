@@ -13,13 +13,29 @@ use crate::status::{FIFOStatus, Status};
 use crate::MAX_PAYLOAD_SIZE;
 use core::fmt;
 
-/// nRF24L01 Driver.
+/// The nRF24L01 driver type. This struct encapsulates all functionality.
+///
+/// # Example
+/// ```
+/// use nrf24::{Nrf24l01, MAX_PAYLOAD_SIZE};
+///
+/// // Initialized and started up chip
+/// let nrf24 = Nrf24l01::new(spi, ce, ncs, &mut delay, MAX_PAYLOAD_SIZE).unwrap();
+///
+///
+/// ```
+///
 pub struct Nrf24l01<SPI, CE, NCS> {
     spi: SPI,
+    // SPI Chip Select Pin, active low
     ncs: NCS,
+    // Chip Enable Pin
     ce: CE,
+    // Config Register
     config_reg: u8,
+    // Payload size
     payload_size: u8,
+    // Transmission buffer
     tx_buf: [u8; MAX_PAYLOAD_SIZE as usize + 1],
 }
 
@@ -36,6 +52,37 @@ where
     const STATUS_RESET: u8 = 0b01110000;
 
     /// Creates a new nrf24l01 driver.
+    ///
+    /// # Example
+    /// ```
+    /// // Initialize all pins required
+    /// let dp = Peripherals::take()::unwrap();
+    /// let mut portd = dp.PORTD.split();
+    /// let ce = portd.pd3.into_output(&mut portd.ddr); // Chip Enable
+    ///
+    /// let mut portb = dp.PORTB.split();
+    /// let ncs = portb.pb2.into_output(&mut portb.ddr); // Chip Select (active low)
+    /// let mosi = portb.pb3.into_output(&mut portb.ddr); // Master Out Slave In Pin
+    /// let miso = portb.pb4.into_pull_up_input(&mut portb.ddr); // Master In Slave Out Pin
+    /// let sclk = portb.pb5.into_output(&mut portb.ddr); // Clock
+    ///
+    /// // Now we initialize SPI settings to create an SPI instance
+    /// let settings = spi::Settings {
+    ///     data_order: DataOrder::MostSignificantFirst,
+    ///     clock: SerialClockRate::OscfOver4,
+    ///     // The required SPI mode for communication with the nrf chip is specified in
+    ///     // this crate
+    ///     mode: nrf24_rs::MODE,
+    /// };
+    /// let spi = spi::Spi::new(dp.SPI, sclk, mosi, miso, settings);
+    ///
+    /// let mut delay = hal::delay::Delay::<clock::MHz16>::new();
+    ///
+    /// // Construct a new instance of the chip with max payload_size
+    /// // This will initialize the module and start it up
+    /// let nrf24 = nrf24_rs::Nrf24l01::new(spi, ce, ncs, &mut delay, nrf24_rs::MAX_PAYLOAD_SIZE)?;
+    ///
+    /// ```
     pub fn new<D>(
         spi: SPI,
         ce: CE,
