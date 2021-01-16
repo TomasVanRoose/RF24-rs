@@ -23,6 +23,18 @@ rf24-rs = "0.1"
 
 - **micro-fmt:** provides a `uDebug` implementation from the [ufmt crate](https://docs.rs/ufmt) for all public structs and enums.
 
+## Status
+### Core functionality
+- [] begin 
+- [] isChipConnected
+- [] startListening
+- [] stopListening 
+- [] available 
+- [] read 
+- [] write 
+- [] openWritingPipe 
+- [] openReadingPipe 
+
 ## License
 
 This project is licensed under Apache License, Version 2.0 ([LICENSE](LICENSE) or https://www.apache.org/licenses/LICENSE-2.0).
