@@ -25,15 +25,15 @@ rf24-rs = "0.1"
 
 ## Status
 ### Core functionality
-- [] begin 
-- [] isChipConnected
-- [] startListening
-- [] stopListening 
-- [] available 
-- [] read 
-- [] write 
-- [] openWritingPipe 
-- [] openReadingPipe 
+- [ ] begin 
+- [ ] isChipConnected
+- [ ] startListening
+- [ ] stopListening 
+- [ ] available 
+- [ ] read 
+- [ ] write 
+- [ ] openWritingPipe 
+- [ ] openReadingPipe 
 
 ## License
 
