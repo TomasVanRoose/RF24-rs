@@ -14,24 +14,29 @@ pub struct FIFOStatus(u8);
 impl Status {
     /// Checks if the status is valid.
     pub fn is_valid(&self) -> bool {
-        (self.0 & (1 << 7)) == 0
+        (self.0 >> 7) & 1 == 0
     }
     /// Indicates if there is data ready to be read.
     pub fn data_ready(&self) -> bool {
-        (self.0 & (1 << 6)) != 0
+        (self.0 >> 6) & 1 != 0
     }
     /// Indicates whether data has been sent.
     pub fn data_sent(&self) -> bool {
-        (self.0 & (1 << 5)) != 0
+        (self.0 >> 5) & 1 != 0
     }
     /// Indicates whether the max retries has been reached.
     /// Can only be true if auto acknowledgement is enabled.
     pub fn reached_max_retries(&self) -> bool {
-        (self.0 & (1 << 4)) != 0
+        (self.0 >> 4) & 1 != 0
     }
-    /// Returns which data pipe is opened.
-    pub fn data_pipe(&self) -> DataPipe {
-        ((self.0 >> 5) & 0b111).into()
+    /// Returns data pipe number for the payload availbe for reading
+    /// or None if RX FIFO is empty.
+    pub fn data_pipe_available(&self) -> Option<DataPipe> {
+        match (self.0 >> 1) & 0b111 {
+            x @ 0..=5 => Some(x.into()),
+            6 => panic!(),
+            7 => None,
+        }
     }
     /// Indicates whether the transmission queue is full or not.
     pub fn tx_full(&self) -> bool {
@@ -42,17 +47,17 @@ impl Status {
 impl FIFOStatus {
     /// Returns `true` if there are availbe locations in transmission queue
     pub fn tx_full(&self) -> bool {
-        self.0 & (1 << 5) != 0
+        (self.0 >> 5) & 1 != 0
     }
 
     /// Returns `true` if the transmission queue is empty
     pub fn tx_empty(&self) -> bool {
-        self.0 & (1 << 4) != 0
+        (self.0 >> 4) & 1 != 0
     }
 
     /// Returns `true` if there are availbe locations in receive queue
     pub fn rx_full(&self) -> bool {
-        self.0 & (1 << 1) != 0
+        (self.0 >> 1) & 1 != 0
     }
 
     /// Returns `true` if the receive queue is empty
@@ -82,7 +87,10 @@ impl core::fmt::Debug for Status {
             let s = s.field("Data ready", &self.data_ready());
             let s = s.field("Data sent", &self.data_sent());
             let s = s.field("Reached max retries", &self.reached_max_retries());
-            let s = s.field("Data pipe nr", &self.data_pipe().pipe());
+            let s = match &self.data_pipe_available() {
+                None => s.field("No data ready to be read in FIFO", &true),
+                Some(pipe) => s.field("Data ready to be read on pipe", &pipe.pipe()),
+            };
             let s = s.field("Transmission FIFO full", &self.tx_full());
             s.finish()
         }
@@ -102,7 +110,10 @@ impl uDebug for Status {
             let s = s.field("Data ready", &self.data_ready())?;
             let s = s.field("Data sent", &self.data_sent())?;
             let s = s.field("Reached max retries", &self.reached_max_retries())?;
-            let s = s.field("Data pipe nr", &self.data_pipe().pipe())?;
+            let s = match &self.data_pipe_available() {
+                None => s.field("No data ready to be read in FIFO", &true),
+                Some(pipe) => s.field("Data ready to be read on pipe", &pipe.pipe()),
+            };
             let s = s.field("Transmission FIFO full", &self.tx_full())?;
             s.finish()
         }
