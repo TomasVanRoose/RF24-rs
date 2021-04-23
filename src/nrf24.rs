@@ -1,6 +1,8 @@
 //! nRF24 implementations.
 
-use crate::config::{AutoRetransmission, DataPipe, DataRate, EncodingScheme, NrfConfig, PALevel};
+use crate::config::{
+    AddressWidth, AutoRetransmission, DataPipe, DataRate, EncodingScheme, NrfConfig, PALevel,
+};
 use crate::error::Error;
 use crate::hal::blocking::{
     delay::DelayMs,
@@ -316,6 +318,24 @@ where
     /// ```
     pub fn set_channel(&mut self, channel: u8) -> Result<(), SPIErr, PinErr> {
         self.write_register(Register::RF_CH, (0xf >> 1) & channel)
+    }
+
+    /// Set the address width, saturating values above or below allowed range.
+    ///
+    /// # Arguments
+    ///
+    /// * `width` number between 3 and 5.
+    ///
+    /// # Examples
+    /// ```rust
+    /// nrf24l01.set_address_width(5)?;
+    /// ```
+    pub fn set_address_width<T>(&mut self, width: T) -> Result<(), SPIErr, PinErr>
+    where
+        T: Into<AddressWidth>,
+    {
+        let width = width.into();
+        self.write_register(Register::SETUP_AW, width.value())
     }
 
     /// Flush transmission FIFO, used in TX mode.

@@ -8,7 +8,7 @@ use ufmt::{uDebug, uWrite, Formatter};
 pub struct NrfConfig {
     pub(crate) payload_size: u8,
     pub(crate) channel: u8,
-    pub(crate) addr_width: u8,
+    pub(crate) addr_width: AddressWidth,
     pub(crate) data_rate: DataRate,
     pub(crate) pa_level: PALevel,
     pub(crate) crc_encoding_scheme: Option<EncodingScheme>,
@@ -22,7 +22,7 @@ impl Default for NrfConfig {
         Self {
             payload_size: MAX_PAYLOAD_SIZE,
             channel: 76,
-            addr_width: 5,
+            addr_width: AddressWidth::default(),
             crc_encoding_scheme: Some(EncodingScheme::R2Bytes),
             pa_level: PALevel::default(),
             data_rate: DataRate::default(),
@@ -96,6 +96,38 @@ pub enum EncodingScheme {
 impl EncodingScheme {
     pub(crate) fn scheme(&self) -> u8 {
         *self as u8
+    }
+}
+
+/// Address width
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub enum AddressWidth {
+    /// 3 bytes
+    R3Bytes = 1,
+    /// 4 bytes
+    R4Bytes = 2,
+    /// 5 bytes
+    R5Bytes = 3,
+}
+
+impl AddressWidth {
+    pub(crate) fn value(&self) -> u8 {
+        *self as u8
+    }
+}
+impl Default for AddressWidth {
+    fn default() -> Self {
+        Self::R5Bytes
+    }
+}
+
+impl From<u8> for AddressWidth {
+    fn from(t: u8) -> Self {
+        match t {
+            0..=3 => Self::R3Bytes,
+            4 => Self::R4Bytes,
+            5..=u8::MAX => Self::R5Bytes,
+        }
     }
 }
 
