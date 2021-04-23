@@ -375,6 +375,16 @@ where
         self.write_register(Register::STATUS, Self::STATUS_RESET)
     }
 
+    /// Checks if the chip is connected to the SPI bus.
+    pub fn is_connected(&mut self) -> Result<bool, SPIErr, PinErr> {
+        let setup = self.read_register(Register::SETUP_AW)?;
+        if setup >= 1 && setup <= 3 {
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
     /// Sends an instruction over the SPI bus without extra data.
     ///
     /// Returns the status recieved from the device.
