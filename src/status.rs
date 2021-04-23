@@ -36,6 +36,7 @@ impl Status {
             x @ 0..=5 => Some(x.into()),
             6 => panic!(),
             7 => None,
+            _ => unreachable!(), // because we AND the value
         }
     }
     /// Indicates whether the transmission queue is full or not.
@@ -111,8 +112,8 @@ impl uDebug for Status {
             let s = s.field("Data sent", &self.data_sent())?;
             let s = s.field("Reached max retries", &self.reached_max_retries())?;
             let s = match &self.data_pipe_available() {
-                None => s.field("No data ready to be read in FIFO", &true),
-                Some(pipe) => s.field("Data ready to be read on pipe", &pipe.pipe()),
+                None => s.field("No data ready to be read in FIFO", &true)?,
+                Some(pipe) => s.field("Data ready to be read on pipe", &pipe.pipe())?,
             };
             let s = s.field("Transmission FIFO full", &self.tx_full())?;
             s.finish()

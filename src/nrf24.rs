@@ -1,12 +1,13 @@
 //! nRF24 implementations.
 
-use crate::config::{DataPipe, DataRate, EncodingScheme, PALevel};
+use crate::config::{AutoRetransmission, DataPipe, DataRate, EncodingScheme, NrfConfig, PALevel};
 use crate::error::Error;
 use crate::hal::blocking::{
     delay::DelayMs,
     delay::DelayUs,
     spi::{Transfer, Write},
 };
+
 use crate::hal::digital::v2::OutputPin;
 use crate::register_acces::{Instruction, Register};
 use crate::status::{FIFOStatus, Status};
@@ -20,7 +21,7 @@ use core::fmt;
 /// use nrf24::{Nrf24l01, MAX_PAYLOAD_SIZE};
 ///
 /// // Initialized and started up chip
-/// let nrf24 = Nrf24l01::new(spi, ce, ncs, &mut delay, MAX_PAYLOAD_SIZE).unwrap();
+/// let nrf24 = Nrf24l01::new(spi, ce, ncs, &mut delay, NrfConfig::default()).unwrap();
 ///
 ///
 /// ```
@@ -78,9 +79,9 @@ where
     ///
     /// let mut delay = hal::delay::Delay::<clock::MHz16>::new();
     ///
-    /// // Construct a new instance of the chip with max payload_size
+    /// // Construct a new instance of the chip with a default configuration
     /// // This will initialize the module and start it up
-    /// let nrf24 = nrf24_rs::Nrf24l01::new(spi, ce, ncs, &mut delay, nrf24_rs::MAX_PAYLOAD_SIZE)?;
+    /// let nrf24 = nrf24_rs::Nrf24l01::new(spi, ce, ncs, &mut delay, NrfConfig::default())?;
     ///
     /// ```
     pub fn new<D>(
@@ -88,7 +89,7 @@ where
         ce: CE,
         ncs: NCS,
         delay: &mut D,
-        payload_size: u8,
+        config: NrfConfig,
     ) -> Result<Self, SPIErr, PinErr>
     where
         D: DelayMs<u8>,
@@ -102,7 +103,7 @@ where
             tx_buf: [0; MAX_PAYLOAD_SIZE as usize + 1],
         };
 
-        chip.set_payload_size(payload_size);
+        chip.set_payload_size(config.payload_size);
 
         // Set the output pins to the correct levels
         chip.ce.set_low().map_err(Error::Pin)?;
@@ -116,20 +117,21 @@ where
         delay.delay_ms(5);
 
         // Set retries
-        chip.set_retries(5, 15)?;
+        chip.set_retries(config.auto_retry.delay(), config.auto_retry.count())?;
         // Set rf
-        chip.setup_rf(DataRate::default(), PALevel::default())?;
+        chip.setup_rf(config.data_rate, PALevel::Min)?;
         // Reset status
         chip.reset_status()?;
-        // Set up default configuration.  Callers can always change it later.
         // This channel should be universally safe and not bleed over into adjacent spectrum.
-        chip.set_channel(76)?;
+        chip.set_channel(config.channel)?;
         // flush buffers
         chip.flush_rx()?;
         chip.flush_tx()?;
 
         // clear CONFIG register, Enable PTX, Power Up & 16-bit CRC
-        chip.enable_crc(EncodingScheme::R2Bytes)?;
+        if let Some(encoding_scheme) = config.crc_encoding_scheme {
+            chip.enable_crc(encoding_scheme)?;
+        }
 
         chip.config_reg = chip.read_register(Register::CONFIG)?;
 
@@ -165,20 +167,12 @@ where
 
     /// Check if there are any bytes available to be read.
     pub fn data_available(&mut self) -> Result<bool, SPIErr, PinErr> {
-        let fifo_status = self
-            .read_register(Register::FIFO_STATUS)
-            .map(FIFOStatus::from)?;
-
-        Ok(!fifo_status.rx_empty())
+        Ok(self.data_available_on_pipe()?.is_some())
     }
 
     /// Returns the data pipe where the data is available and `None` if no data available.
     pub fn data_available_on_pipe(&mut self) -> Result<Option<DataPipe>, SPIErr, PinErr> {
-        if self.data_available()? {
-            self.status().map(|s| Some(s.data_pipe()))
-        } else {
-            Ok(None)
-        }
+        Ok(self.status()?.data_pipe_available())
     }
 
     /// Opens a reading pipe.

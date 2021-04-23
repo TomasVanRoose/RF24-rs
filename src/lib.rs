@@ -27,7 +27,7 @@
 #![no_std]
 
 extern crate embedded_hal as hal;
-use crate::hal::spi;
+use hal::spi;
 
 mod config;
 mod error;
@@ -38,6 +38,7 @@ mod status;
 pub use crate::config::{DataPipe, DataRate, PALevel};
 pub use crate::error::Error;
 pub use crate::nrf24::Nrf24l01;
+pub use crate::nrf24::NrfConfig;
 pub use crate::status::Status;
 //pub use crate::register_acces::Register;
 

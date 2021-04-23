@@ -1,7 +1,37 @@
 //! Different structs and values for configuration of the chip
 
+use crate::MAX_PAYLOAD_SIZE;
 #[cfg(feature = "micro-fmt")]
 use ufmt::{uDebug, uWrite, Formatter};
+
+#[derive(Copy, Debug, Clone)]
+pub struct NrfConfig {
+    pub(crate) payload_size: u8,
+    pub(crate) channel: u8,
+    pub(crate) addr_width: u8,
+    pub(crate) data_rate: DataRate,
+    pub(crate) pa_level: PALevel,
+    pub(crate) crc_encoding_scheme: Option<EncodingScheme>,
+    pub(crate) dynamic_payloads_enabled: bool,
+    pub(crate) ack_payloads_enabled: bool,
+    pub(crate) auto_retry: AutoRetransmission,
+}
+
+impl Default for NrfConfig {
+    fn default() -> Self {
+        Self {
+            payload_size: MAX_PAYLOAD_SIZE,
+            channel: 76,
+            addr_width: 5,
+            crc_encoding_scheme: Some(EncodingScheme::R2Bytes),
+            pa_level: PALevel::default(),
+            data_rate: DataRate::default(),
+            dynamic_payloads_enabled: false,
+            ack_payloads_enabled: false,
+            auto_retry: AutoRetransmission::default(),
+        }
+    }
+}
 
 /// Different RF power levels. The higher the level the bigger range, but the more the current
 /// consumption.
@@ -16,7 +46,7 @@ pub enum PALevel {
     /// -6 dBm, 9.0 mA current consumption.
     High = 0b0000_0100,
     /// -0 dBm, 11.3 mA current consumption.
-    Max = -0b0000_0110,
+    Max = 0b0000_0110,
 }
 
 impl PALevel {
@@ -50,7 +80,7 @@ impl DataRate {
 
 impl Default for DataRate {
     fn default() -> Self {
-        DataRate::R2Mbps
+        DataRate::R1Mbps
     }
 }
 
@@ -66,6 +96,37 @@ pub enum EncodingScheme {
 impl EncodingScheme {
     pub(crate) fn scheme(&self) -> u8 {
         *self as u8
+    }
+}
+
+/// Configuration of automatic retransmission.
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub struct AutoRetransmission {
+    /// The auto retransmit delay.
+    /// Values can be between 0 and 15.
+    /// The delay before a retransmit is initiated, is calculated according to the following formula:
+    /// > ((**delay** + 1) * 250) + 86 µs
+    delay: u8,
+    /// The number of times there will be an auto retransmission.
+    /// Must be a value between 0 and 15.
+    count: u8,
+}
+
+impl Default for AutoRetransmission {
+    fn default() -> Self {
+        Self {
+            delay: 5,
+            count: 15,
+        }
+    }
+}
+
+impl AutoRetransmission {
+    pub fn delay(&self) -> u8 {
+        self.delay
+    }
+    pub fn count(&self) -> u8 {
+        self.count
     }
 }
 
