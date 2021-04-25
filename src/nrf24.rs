@@ -105,8 +105,6 @@ where
             tx_buf: [0; MAX_PAYLOAD_SIZE as usize + 1],
         };
 
-        chip.set_payload_size(config.payload_size);
-
         // Set the output pins to the correct levels
         chip.ce.set_low().map_err(Error::Pin)?;
         chip.ncs.set_high().map_err(Error::Pin)?;
@@ -122,6 +120,10 @@ where
         chip.set_retries(config.auto_retry.delay(), config.auto_retry.count())?;
         // Set rf
         chip.setup_rf(config.data_rate, PALevel::Min)?;
+        // Set payload siz
+        chip.set_payload_size(config.payload_size)?;
+        // Set address length
+        chip.set_address_width(config.addr_width)?;
         // Reset status
         chip.reset_status()?;
         // This channel should be universally safe and not bleed over into adjacent spectrum.
@@ -190,8 +192,6 @@ where
         let old_reg = self.read_register(Register::EN_RXADDR)?;
         self.write_register(Register::EN_RXADDR, old_reg | 1)?;
 
-        // set payload size
-        self.write_register(Register::RX_PW_P0, self.payload_size)?;
         Ok(())
     }
 
@@ -254,17 +254,19 @@ where
         if addr.len() > Self::MAX_ADDR_WIDTH {
             addr = &addr[0..Self::MAX_ADDR_WIDTH];
         }
-        self.write_register(Register::TX_ADDR, addr)?;
         // We need to open Reading Pipe 0 with the same address name
         // because ACK messages will be recieved on this channel
         self.write_register(Register::RX_ADDR_P0, addr)?;
+        // Open writing pipe
+        self.write_register(Register::TX_ADDR, addr)?;
 
-        // set payload size
-        self.write_register(Register::RX_PW_P0, self.payload_size)?;
         Ok(())
     }
 
     /// Writes data on the opened channel
+    ///
+    /// Will clear all interrupt flags after write.
+    /// Returns an error when max retries has been reached.
     pub fn write<D: DelayUs<u8>>(
         &mut self,
         delay: &mut D,
@@ -274,13 +276,22 @@ where
         let len = core::cmp::min(buf.len(), self.payload_size as usize);
 
         // Copy data over to tx fifo
-        let _status = self.send_command_bytes(Instruction::WTX, &buf[..len])?;
+        let status = self.send_command_bytes(Instruction::WTX, &buf[..len])?;
 
         // Start transmission:
         // pulse CE pin to signal transmission start
         self.ce.set_high().map_err(Error::Pin)?;
         delay.delay_us(10);
         self.ce.set_low().map_err(Error::Pin)?;
+
+        // Clear interrupt flags
+        self.write_register(Register::STATUS, Status::flags().value())?;
+
+        // Max retries exceeded
+        if status.reached_max_retries() {
+            self.flush_tx()?;
+            return Err(Error::MaxRT);
+        }
 
         Ok(())
     }
@@ -378,8 +389,21 @@ where
     /// Set the payload size.
     ///
     /// Values bigger than [MAX_PAYLOAD_SIZE](constant.MAX_PAYLOAD_SIZE.html) will be set to the maximum
-    pub fn set_payload_size(&mut self, payload_size: u8) {
+    pub fn set_payload_size(&mut self, payload_size: u8) -> Result<(), SPIErr, PinErr> {
         self.payload_size = core::cmp::min(MAX_PAYLOAD_SIZE, payload_size);
+        self.write_register(Register::RX_PW_P0, self.payload_size)?;
+        self.write_register(Register::RX_PW_P1, self.payload_size)?;
+        self.write_register(Register::RX_PW_P2, self.payload_size)?;
+        self.write_register(Register::RX_PW_P3, self.payload_size)?;
+        self.write_register(Register::RX_PW_P4, self.payload_size)?;
+        self.write_register(Register::RX_PW_P5, self.payload_size)
+    }
+
+    /// Get the payload size.
+    ///
+    /// Guarantueed to be a value betwoon 1 and 32.
+    pub fn payload_size(&self) -> u8 {
+        self.payload_size
     }
 
     /// Reads the status register from device.

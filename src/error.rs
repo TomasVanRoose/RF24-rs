@@ -7,4 +7,6 @@ pub enum Error<CommE, PinE> {
     Pin(PinE),
     /// Communication error with module
     CommunicationError(u8),
+    /// Max retries reached
+    MaxRT,
 }

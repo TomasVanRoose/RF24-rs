@@ -12,6 +12,14 @@ pub struct Status(u8);
 pub struct FIFOStatus(u8);
 
 impl Status {
+    /// Create a status obj with all the flags turned on.
+    pub fn flags() -> Self {
+        Self(0b01110000)
+    }
+    /// Returns the raw value represented by this struct.
+    pub fn value(&self) -> u8 {
+        self.0
+    }
     /// Checks if the status is valid.
     pub fn is_valid(&self) -> bool {
         (self.0 >> 7) & 1 == 0
