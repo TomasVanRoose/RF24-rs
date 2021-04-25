@@ -38,7 +38,7 @@ mod status;
 pub use crate::config::{DataPipe, DataRate, NrfConfig, PALevel};
 pub use crate::error::Error;
 pub use crate::nrf24::Nrf24l01;
-pub use crate::status::Status;
+pub use crate::status::{FIFOStatus, Status};
 //pub use crate::register_acces::Register;
 
 /// SPI mode. Use this when initializing the SPI instance.

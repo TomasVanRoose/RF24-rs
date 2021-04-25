@@ -4,6 +4,7 @@ use crate::MAX_PAYLOAD_SIZE;
 #[cfg(feature = "micro-fmt")]
 use ufmt::{uDebug, uWrite, Formatter};
 
+/// Configuration struct for NRF chip
 #[derive(Copy, Debug, Clone)]
 pub struct NrfConfig {
     pub(crate) payload_size: u8,
@@ -50,6 +51,9 @@ pub enum PALevel {
 }
 
 impl PALevel {
+    pub(crate) fn bitmask() -> u8 {
+        0b0000_0110
+    }
     pub(crate) fn level(&self) -> u8 {
         *self as u8
     }
@@ -58,6 +62,33 @@ impl PALevel {
 impl Default for PALevel {
     fn default() -> Self {
         PALevel::Min
+    }
+}
+
+impl From<u8> for PALevel {
+    fn from(t: u8) -> Self {
+        match t & Self::bitmask() {
+            0b0000_0000 => Self::Min,
+            0b0000_0010 => Self::Low,
+            0b0000_0100 => Self::High,
+            0b0000_0110 => Self::Max,
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[cfg(feature = "micro-fmt")]
+impl uDebug for PALevel {
+    fn fmt<W: ?Sized>(&self, f: &mut Formatter<'_, W>) -> core::result::Result<(), W::Error>
+    where
+        W: uWrite,
+    {
+        match *self {
+            PALevel::Min => f.write_str("Min PA Level (-18 dBm)"),
+            PALevel::Low => f.write_str("Low PA level (-12 dBm)"),
+            PALevel::High => f.write_str("High PA level (-6 dBm)"),
+            PALevel::Max => f.write_str("Max PA level (0 dBm)"),
+        }
     }
 }
 
@@ -73,6 +104,9 @@ pub enum DataRate {
 }
 
 impl DataRate {
+    pub(crate) fn bitmask() -> u8 {
+        0b1111_1110
+    }
     pub(crate) fn rate(&self) -> u8 {
         *self as u8
     }
@@ -81,6 +115,29 @@ impl DataRate {
 impl Default for DataRate {
     fn default() -> Self {
         DataRate::R1Mbps
+    }
+}
+
+impl From<u8> for DataRate {
+    fn from(t: u8) -> Self {
+        match t & Self::bitmask() {
+            0 => Self::R1Mbps,
+            1 => Self::R2Mbps,
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[cfg(feature = "micro-fmt")]
+impl uDebug for DataRate {
+    fn fmt<W: ?Sized>(&self, f: &mut Formatter<'_, W>) -> core::result::Result<(), W::Error>
+    where
+        W: uWrite,
+    {
+        match *self {
+            DataRate::R1Mbps => f.write_str("1 Mbps"),
+            DataRate::R2Mbps => f.write_str("2 Mbps"),
+        }
     }
 }
 

@@ -1,8 +1,6 @@
 //! nRF24 implementations.
 
-use crate::config::{
-    AddressWidth, AutoRetransmission, DataPipe, DataRate, EncodingScheme, NrfConfig, PALevel,
-};
+use crate::config::{AddressWidth, DataPipe, DataRate, EncodingScheme, NrfConfig, PALevel};
 use crate::error::Error;
 use crate::hal::blocking::{
     delay::DelayMs,
@@ -12,7 +10,7 @@ use crate::hal::blocking::{
 
 use crate::hal::digital::v2::OutputPin;
 use crate::register_acces::{Instruction, Register};
-use crate::status::{FIFOStatus, Status};
+use crate::status::Status;
 use crate::MAX_PAYLOAD_SIZE;
 use core::fmt;
 
@@ -325,10 +323,17 @@ where
     ///
     /// # Examples
     /// ```rust
-    /// nrf24l01.set_channel(73)?;
+    /// nrf24l01.set_channel(74)?;
     /// ```
     pub fn set_channel(&mut self, channel: u8) -> Result<(), SPIErr, PinErr> {
-        self.write_register(Register::RF_CH, (0xf >> 1) & channel)
+        self.write_register(Register::RF_CH, (u8::MAX >> 1) & channel)
+    }
+
+    /// Return the frequency channel nRF24L01 operates on.
+    ///
+    /// The actual frequency will we the channel +2400 MHz.
+    pub fn channel(&mut self) -> Result<u8, SPIErr, PinErr> {
+        self.read_register(Register::RF_CH)
     }
 
     /// Set the address width, saturating values above or below allowed range.
@@ -347,6 +352,16 @@ where
     {
         let width = width.into();
         self.write_register(Register::SETUP_AW, width.value())
+    }
+
+    /// Return the current data rate.
+    pub fn data_rate(&mut self) -> Result<DataRate, SPIErr, PinErr> {
+        self.read_register(Register::RF_SETUP).map(DataRate::from)
+    }
+
+    /// Return the current power amplifier level.
+    pub fn power_amp_level(&mut self) -> Result<PALevel, SPIErr, PinErr> {
+        self.read_register(Register::RF_SETUP).map(PALevel::from)
     }
 
     /// Flush transmission FIFO, used in TX mode.
