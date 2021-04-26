@@ -35,9 +35,14 @@ pub struct Nrf24l01<SPI, CE, NCS> {
     // Config Register
     config_reg: u8,
     // Payload size
-    payload_size: u8,
+    payload_size: PayloadSize,
     // Transmission buffer
     tx_buf: [u8; MAX_PAYLOAD_SIZE as usize + 1],
+}
+
+enum PayloadSize {
+    Dynamic,
+    Static(u8),
 }
 
 type Result<T, E, F> = core::result::Result<T, Error<E, F>>;
@@ -99,7 +104,7 @@ where
             ncs,
             ce,
             config_reg: 0,
-            payload_size: 0,
+            payload_size: PayloadSize::Static(0),
             tx_buf: [0; MAX_PAYLOAD_SIZE as usize + 1],
         };
 
@@ -118,7 +123,7 @@ where
         chip.set_retries(config.auto_retry.delay(), config.auto_retry.count())?;
         // Set rf
         chip.setup_rf(config.data_rate, config.pa_level)?;
-        // Set payload siz
+        // Set payload size
         chip.set_payload_size(config.payload_size)?;
         // Set address length
         chip.set_address_width(config.addr_width)?;
@@ -225,7 +230,11 @@ where
     ///
     /// Returns the number of bytes read into the buffer.
     pub fn read(&mut self, buf: &mut [u8]) -> Result<usize, SPIErr, PinErr> {
-        let len = core::cmp::min(buf.len(), self.payload_size as usize);
+        let len = if let PayloadSize::Static(n) = self.payload_size {
+            n as usize
+        } else {
+            core::cmp::min(buf.len(), MAX_PAYLOAD_SIZE as usize)
+        };
 
         // Use tx buffer to copy the values into
         // First byte will be the opcode
@@ -270,11 +279,32 @@ where
         delay: &mut D,
         buf: &[u8],
     ) -> Result<(), SPIErr, PinErr> {
-        // Can transmit a max of `payload_size` bytes
-        let len = core::cmp::min(buf.len(), self.payload_size as usize);
+        let send_count = if let PayloadSize::Static(n) = self.payload_size {
+            let n = n as usize;
+            // we have to send `n` bytes
+            let len = core::cmp::min(buf.len(), n);
+            self.tx_buf[1..=len].copy_from_slice(&buf[..len]);
+            if len < MAX_PAYLOAD_SIZE as usize {
+                self.tx_buf[len + 1..=n].fill(0);
+            }
+            // now our tx_buf is guarantueed to have `n` bytes filled
+            n
+        } else {
+            // In dynamic payload mode, max payload_size is the limit
+            core::cmp::min(buf.len(), MAX_PAYLOAD_SIZE as usize)
+        };
 
-        // Copy data over to tx fifo
-        let status = self.send_command_bytes(Instruction::WTX, &buf[..len])?;
+        // Add instruction to buffer
+        self.tx_buf[0] = Instruction::WTX.opcode();
+        // Write to spi
+        self.ncs.set_low().map_err(Error::Pin)?;
+        let r = self
+            .spi
+            .transfer(&mut self.tx_buf[..=send_count])
+            .map_err(Error::Spi)?;
+        self.ncs.set_high().map_err(Error::Pin)?;
+
+        let status = Status::from(self.tx_buf[0]);
 
         // Start transmission:
         // pulse CE pin to signal transmission start
@@ -418,20 +448,25 @@ where
     ///
     /// Values bigger than [MAX_PAYLOAD_SIZE](constant.MAX_PAYLOAD_SIZE.html) will be set to the maximum
     pub fn set_payload_size(&mut self, payload_size: u8) -> Result<(), SPIErr, PinErr> {
-        self.payload_size = core::cmp::min(MAX_PAYLOAD_SIZE, payload_size);
-        self.write_register(Register::RX_PW_P0, self.payload_size)?;
-        self.write_register(Register::RX_PW_P1, self.payload_size)?;
-        self.write_register(Register::RX_PW_P2, self.payload_size)?;
-        self.write_register(Register::RX_PW_P3, self.payload_size)?;
-        self.write_register(Register::RX_PW_P4, self.payload_size)?;
-        self.write_register(Register::RX_PW_P5, self.payload_size)
+        let payload_size = core::cmp::min(MAX_PAYLOAD_SIZE, payload_size);
+        self.payload_size = PayloadSize::Static(payload_size);
+        self.write_register(Register::RX_PW_P0, payload_size)?;
+        self.write_register(Register::RX_PW_P1, payload_size)?;
+        self.write_register(Register::RX_PW_P2, payload_size)?;
+        self.write_register(Register::RX_PW_P3, payload_size)?;
+        self.write_register(Register::RX_PW_P4, payload_size)?;
+        self.write_register(Register::RX_PW_P5, payload_size)
     }
 
     /// Get the payload size.
     ///
     /// Guarantueed to be a value betwoon 1 and 32.
     pub fn payload_size(&self) -> u8 {
-        self.payload_size
+        if let PayloadSize::Static(s) = self.payload_size {
+            s
+        } else {
+            0
+        }
     }
 
     /// Reads the status register from device.
@@ -544,7 +579,7 @@ where
             .field("ncs", &self.ncs)
             .field("ce", &self.ce)
             .field("config_reg", &self.config_reg)
-            .field("payload_size", &self.payload_size)
+            //.field("payload_size", &self.payload_size)
             .field("tx_buf", &&self.tx_buf[1..])
             .finish()
     }
