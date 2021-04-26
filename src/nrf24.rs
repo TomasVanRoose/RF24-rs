@@ -117,7 +117,7 @@ where
         // Set retries
         chip.set_retries(config.auto_retry.delay(), config.auto_retry.count())?;
         // Set rf
-        chip.setup_rf(config.data_rate, PALevel::Min)?;
+        chip.setup_rf(config.data_rate, config.pa_level)?;
         // Set payload siz
         chip.set_payload_size(config.payload_size)?;
         // Set address length
@@ -315,6 +315,19 @@ where
         self.write_register(Register::SETUP_RETR, (delay << 4) | (count))
     }
 
+    /// Return the delay between auto retransmissions in ms.
+    pub fn auto_retry_delay(&mut self) -> Result<u32, SPIErr, PinErr> {
+        self.read_register(Register::SETUP_RETR)
+            .map(|raw| (raw >> 4) as u32)
+            .map(|x| ((x + 1) * 250) + 86)
+    }
+
+    /// Return the number of times there will be an auto retransmissions.
+    pub fn auto_retry_attempts(&mut self) -> Result<u8, SPIErr, PinErr> {
+        self.read_register(Register::SETUP_RETR)
+            .map(|x| x & 0b0000_1111)
+    }
+
     /// Set the frequency channel nRF24L01 operates on.
     ///
     /// # Arguments
@@ -447,7 +460,7 @@ where
     /// Sends an instruction over the SPI bus without extra data.
     ///
     /// Returns the status recieved from the device.
-    /// Normally used for the other instructions then read and write.  
+    /// Normally used for the other instructions than read and write.  
     fn send_command(&mut self, instruction: Instruction) -> Result<Status, SPIErr, PinErr> {
         self.send_command_bytes(instruction, &[])
     }
