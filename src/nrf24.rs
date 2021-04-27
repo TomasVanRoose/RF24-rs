@@ -57,7 +57,8 @@ where
     const CORRECT_CONFIG: u8 = 0b00001110;
     const STATUS_RESET: u8 = 0b01110000;
 
-    /// Creates a new nrf24l01 driver.
+    /// Creates a new nrf24l01 driver with given config.
+    /// Stars up the device, so calling `power_up` isn't necessary.
     ///
     /// # Example
     /// ```
@@ -172,14 +173,14 @@ where
         Ok(())
     }
 
-    /// Check if there are any bytes available to be read.
-    pub fn data_available(&mut self) -> Result<bool, SPIErr, PinErr> {
-        Ok(self.data_available_on_pipe()?.is_some())
-    }
-
-    /// Returns the data pipe where the data is available and `None` if no data available.
-    pub fn data_available_on_pipe(&mut self) -> Result<Option<DataPipe>, SPIErr, PinErr> {
-        Ok(self.status()?.data_pipe_available())
+    /// Checks if the chip is connected to the SPI bus.
+    pub fn is_connected(&mut self) -> Result<bool, SPIErr, PinErr> {
+        let setup = self.read_register(Register::SETUP_AW)?;
+        if setup >= 1 && setup <= 3 {
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 
     /// Opens a reading pipe.
@@ -198,7 +199,24 @@ where
         Ok(())
     }
 
+    /// Opens a writing pipe.
+    ///
+    /// Must be called before writing data.
+    pub fn open_writing_pipe(&mut self, mut addr: &[u8]) -> Result<(), SPIErr, PinErr> {
+        if addr.len() > Self::MAX_ADDR_WIDTH {
+            addr = &addr[0..Self::MAX_ADDR_WIDTH];
+        }
+        // We need to open Reading Pipe 0 with the same address name
+        // because ACK messages will be recieved on this channel
+        self.write_register(Register::RX_ADDR_P0, addr)?;
+        // Open writing pipe
+        self.write_register(Register::TX_ADDR, addr)?;
+
+        Ok(())
+    }
+
     /// Starts listening on the pipes that are opened for reading.
+    /// Used in Receiver Mode.
     ///
     /// Make sure [open_reading_pipe()](#method.open_reading_pipe) is called first.
     ///
@@ -214,6 +232,7 @@ where
 
         Ok(())
     }
+
     /// Stop listening.
     ///
     /// TODO: Use the type system to make start and stop listening by RAII and Drop
@@ -224,6 +243,16 @@ where
         self.write_register(Register::CONFIG, self.config_reg)?;
 
         Ok(())
+    }
+
+    /// Check if there are any bytes available to be read.
+    pub fn data_available(&mut self) -> Result<bool, SPIErr, PinErr> {
+        Ok(self.data_available_on_pipe()?.is_some())
+    }
+
+    /// Returns the data pipe where the data is available and `None` if no data available.
+    pub fn data_available_on_pipe(&mut self) -> Result<Option<DataPipe>, SPIErr, PinErr> {
+        Ok(self.status()?.data_pipe_available())
     }
 
     /// Read the available payload.
@@ -252,22 +281,6 @@ where
         // Make both slices are the same length, otherwise `copy_from_slice` panics.
         buf[..len].copy_from_slice(&r[1..=len]);
         Ok(len)
-    }
-
-    /// Opens a writing pipe.
-    ///
-    /// Must be called before writing data.
-    pub fn open_writing_pipe(&mut self, mut addr: &[u8]) -> Result<(), SPIErr, PinErr> {
-        if addr.len() > Self::MAX_ADDR_WIDTH {
-            addr = &addr[0..Self::MAX_ADDR_WIDTH];
-        }
-        // We need to open Reading Pipe 0 with the same address name
-        // because ACK messages will be recieved on this channel
-        self.write_register(Register::RX_ADDR_P0, addr)?;
-        // Open writing pipe
-        self.write_register(Register::TX_ADDR, addr)?;
-
-        Ok(())
     }
 
     /// Writes data on the opened channel
@@ -304,7 +317,7 @@ where
             .map_err(Error::Spi)?;
         self.ncs.set_high().map_err(Error::Pin)?;
 
-        let status = Status::from(self.tx_buf[0]);
+        let status = Status::from(r[0]);
 
         // Start transmission:
         // pulse CE pin to signal transmission start
@@ -480,16 +493,6 @@ where
     /// - maximum number of number of retries interrupt
     pub fn reset_status(&mut self) -> Result<(), SPIErr, PinErr> {
         self.write_register(Register::STATUS, Self::STATUS_RESET)
-    }
-
-    /// Checks if the chip is connected to the SPI bus.
-    pub fn is_connected(&mut self) -> Result<bool, SPIErr, PinErr> {
-        let setup = self.read_register(Register::SETUP_AW)?;
-        if setup >= 1 && setup <= 3 {
-            Ok(true)
-        } else {
-            Ok(false)
-        }
     }
 
     /// Sends an instruction over the SPI bus without extra data.

@@ -25,7 +25,6 @@
     trivial_numeric_casts
 )]
 #![no_std]
-#![feature(slice_fill)]
 
 extern crate embedded_hal as hal;
 use hal::spi;
