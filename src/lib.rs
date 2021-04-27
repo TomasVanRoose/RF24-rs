@@ -25,7 +25,6 @@
     trivial_numeric_casts
 )]
 #![no_std]
-#![feature(slice_fill)]
 extern crate embedded_hal as hal;
 use hal::spi;
 
@@ -36,7 +35,7 @@ mod register_acces;
 mod status;
 
 pub use crate::config::{DataPipe, DataRate, NrfConfig, PALevel};
-pub use crate::error::Error;
+pub use crate::error::TransferError;
 pub use crate::nrf24::Nrf24l01;
 pub use crate::status::{FIFOStatus, Status};
 //pub use crate::register_acces::Register;

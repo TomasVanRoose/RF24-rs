@@ -1,7 +1,7 @@
 //! nRF24 implementations.
 
 use crate::config::{AddressWidth, DataPipe, DataRate, EncodingScheme, NrfConfig, PALevel};
-use crate::error::Error;
+use crate::error::TransferError;
 use crate::hal::blocking::{
     delay::DelayMs,
     delay::DelayUs,
@@ -45,7 +45,7 @@ enum PayloadSize {
     Static(u8),
 }
 
-type Result<T, E, F> = core::result::Result<T, Error<E, F>>;
+//type Result<T, E, F> = core::result::Result<T, Error<E, F>>;
 
 impl<SPI, CE, NCS, SPIErr, PinErr> Nrf24l01<SPI, CE, NCS>
 where
@@ -96,7 +96,7 @@ where
         ncs: NCS,
         delay: &mut D,
         config: NrfConfig,
-    ) -> Result<Self, SPIErr, PinErr>
+    ) -> Result<Self, TransferError<SPIErr, PinErr>>
     where
         D: DelayMs<u8>,
     {
@@ -110,8 +110,8 @@ where
         };
 
         // Set the output pins to the correct levels
-        chip.ce.set_low().map_err(Error::Pin)?;
-        chip.ncs.set_high().map_err(Error::Pin)?;
+        chip.set_ce_low()?;
+        chip.set_ncs_high()?;
 
         // Must allow the radio time to settle else configuration bits will not necessarily stick.
         // This is actually only required following power up but some settling time also appears to
@@ -146,7 +146,7 @@ where
         chip.power_up(delay)?;
 
         if chip.config_reg != Self::CORRECT_CONFIG {
-            Err(Error::CommunicationError(chip.config_reg))
+            Err(TransferError::CommunicationError(chip.config_reg))
         } else {
             Ok(chip)
         }
@@ -158,7 +158,7 @@ where
     /// ```rust
     /// chip.power_up(&mut delay)?;
     /// ```
-    pub fn power_up<D>(&mut self, delay: &mut D) -> Result<(), SPIErr, PinErr>
+    pub fn power_up<D>(&mut self, delay: &mut D) -> Result<(), TransferError<SPIErr, PinErr>>
     where
         D: DelayMs<u8>,
     {
@@ -174,7 +174,7 @@ where
     }
 
     /// Checks if the chip is connected to the SPI bus.
-    pub fn is_connected(&mut self) -> Result<bool, SPIErr, PinErr> {
+    pub fn is_connected(&mut self) -> Result<bool, TransferError<SPIErr, PinErr>> {
         let setup = self.read_register(Register::SETUP_AW)?;
         if setup >= 1 && setup <= 3 {
             Ok(true)
@@ -190,7 +190,7 @@ where
         &mut self,
         pipe: DataPipe,
         mut addr: &[u8],
-    ) -> Result<(), SPIErr, PinErr> {
+    ) -> Result<(), TransferError<SPIErr, PinErr>> {
         if addr.len() > Self::MAX_ADDR_WIDTH {
             addr = &addr[0..Self::MAX_ADDR_WIDTH];
         }
@@ -212,7 +212,10 @@ where
     /// Opens a writing pipe.
     ///
     /// Must be called before writing data.
-    pub fn open_writing_pipe(&mut self, mut addr: &[u8]) -> Result<(), SPIErr, PinErr> {
+    pub fn open_writing_pipe(
+        &mut self,
+        mut addr: &[u8],
+    ) -> Result<(), TransferError<SPIErr, PinErr>> {
         if addr.len() > Self::MAX_ADDR_WIDTH {
             addr = &addr[0..Self::MAX_ADDR_WIDTH];
         }
@@ -231,14 +234,14 @@ where
     /// Make sure [open_reading_pipe()](#method.open_reading_pipe) is called first.
     ///
     /// TODO: Use the type system to make start and stop listening by RAII and Drop
-    pub fn start_listening(&mut self) -> Result<(), SPIErr, PinErr> {
+    pub fn start_listening(&mut self) -> Result<(), TransferError<SPIErr, PinErr>> {
         // Enable RX listening flag
         self.config_reg |= 1;
         self.write_register(Register::CONFIG, self.config_reg)?;
         // Flush interrupts
         self.reset_status()?;
 
-        self.ce.set_high().map_err(Error::Pin)?;
+        self.set_ce_high()?;
 
         Ok(())
     }
@@ -246,8 +249,8 @@ where
     /// Stop listening.
     ///
     /// TODO: Use the type system to make start and stop listening by RAII and Drop
-    pub fn stop_listening(&mut self) -> Result<(), SPIErr, PinErr> {
-        self.ce.set_low().map_err(Error::Pin)?;
+    pub fn stop_listening(&mut self) -> Result<(), TransferError<SPIErr, PinErr>> {
+        self.set_ce_low()?;
 
         self.config_reg &= !0b1;
         self.write_register(Register::CONFIG, self.config_reg)?;
@@ -256,19 +259,21 @@ where
     }
 
     /// Check if there are any bytes available to be read.
-    pub fn data_available(&mut self) -> Result<bool, SPIErr, PinErr> {
+    pub fn data_available(&mut self) -> Result<bool, TransferError<SPIErr, PinErr>> {
         Ok(self.data_available_on_pipe()?.is_some())
     }
 
     /// Returns the data pipe where the data is available and `None` if no data available.
-    pub fn data_available_on_pipe(&mut self) -> Result<Option<DataPipe>, SPIErr, PinErr> {
+    pub fn data_available_on_pipe(
+        &mut self,
+    ) -> Result<Option<DataPipe>, TransferError<SPIErr, PinErr>> {
         Ok(self.status()?.data_pipe_available())
     }
 
     /// Read the available payload.
     ///
     /// Returns the number of bytes read into the buffer.
-    pub fn read(&mut self, buf: &mut [u8]) -> Result<usize, SPIErr, PinErr> {
+    pub fn read(&mut self, buf: &mut [u8]) -> Result<usize, TransferError<SPIErr, PinErr>> {
         let len = if let PayloadSize::Static(n) = self.payload_size {
             n as usize
         } else {
@@ -279,17 +284,14 @@ where
         // First byte will be the opcode
         self.tx_buf[0] = Instruction::RRX.opcode();
         // Write to spi
-        self.ncs.set_low().map_err(Error::Pin)?;
-        let r = self
-            .spi
-            .transfer(&mut self.tx_buf[..=len])
-            .map_err(Error::Spi)?;
-        self.ncs.set_high().map_err(Error::Pin)?;
-
+        self.set_ncs_low()?;
+        let r = self.spi_transfer_tx_buf(len)?;
         // Transfer the data read to buf.
         // Skip first byte because it contains the command.
         // Make both slices are the same length, otherwise `copy_from_slice` panics.
         buf[..len].copy_from_slice(&r[1..=len]);
+        self.set_ncs_high()?;
+
         Ok(len)
     }
 
@@ -301,7 +303,7 @@ where
         &mut self,
         delay: &mut D,
         buf: &[u8],
-    ) -> Result<(), SPIErr, PinErr> {
+    ) -> Result<(), TransferError<SPIErr, PinErr>> {
         let send_count = if let PayloadSize::Static(n) = self.payload_size {
             let n = n as usize;
             // we have to send `n` bytes
@@ -320,20 +322,16 @@ where
         // Add instruction to buffer
         self.tx_buf[0] = Instruction::WTX.opcode();
         // Write to spi
-        self.ncs.set_low().map_err(Error::Pin)?;
-        let r = self
-            .spi
-            .transfer(&mut self.tx_buf[..=send_count])
-            .map_err(Error::Spi)?;
-        self.ncs.set_high().map_err(Error::Pin)?;
-
+        self.set_ncs_low()?;
+        let r = self.spi_transfer_tx_buf(send_count)?;
         let status = Status::from(r[0]);
+        self.set_ncs_high()?;
 
         // Start transmission:
         // pulse CE pin to signal transmission start
-        self.ce.set_high().map_err(Error::Pin)?;
+        self.set_ce_high()?;
         delay.delay_us(10);
-        self.ce.set_low().map_err(Error::Pin)?;
+        self.set_ce_low()?;
 
         // Clear interrupt flags
         self.write_register(Register::STATUS, Status::flags().value())?;
@@ -341,7 +339,7 @@ where
         // Max retries exceeded
         if status.reached_max_retries() {
             self.flush_tx()?;
-            return Err(Error::MaxRT);
+            return Err(TransferError::MaximumRetries);
         }
 
         Ok(())
@@ -364,19 +362,23 @@ where
     /// // and the retransmit count to 15.
     /// nrf24l01.set_retries(5, 15)?;
     /// ```
-    pub fn set_retries(&mut self, delay: u8, count: u8) -> Result<(), SPIErr, PinErr> {
+    pub fn set_retries(
+        &mut self,
+        delay: u8,
+        count: u8,
+    ) -> Result<(), TransferError<SPIErr, PinErr>> {
         self.write_register(Register::SETUP_RETR, (delay << 4) | (count))
     }
 
     /// Return the delay between auto retransmissions in ms.
-    pub fn auto_retry_delay(&mut self) -> Result<u32, SPIErr, PinErr> {
+    pub fn auto_retry_delay(&mut self) -> Result<u32, TransferError<SPIErr, PinErr>> {
         self.read_register(Register::SETUP_RETR)
             .map(|raw| (raw >> 4) as u32)
             .map(|x| ((x + 1) * 250) + 86)
     }
 
     /// Return the number of times there will be an auto retransmissions.
-    pub fn auto_retry_attempts(&mut self) -> Result<u8, SPIErr, PinErr> {
+    pub fn auto_retry_attempts(&mut self) -> Result<u8, TransferError<SPIErr, PinErr>> {
         self.read_register(Register::SETUP_RETR)
             .map(|x| x & 0b0000_1111)
     }
@@ -391,14 +393,14 @@ where
     /// ```rust
     /// nrf24l01.set_channel(74)?;
     /// ```
-    pub fn set_channel(&mut self, channel: u8) -> Result<(), SPIErr, PinErr> {
+    pub fn set_channel(&mut self, channel: u8) -> Result<(), TransferError<SPIErr, PinErr>> {
         self.write_register(Register::RF_CH, (u8::MAX >> 1) & channel)
     }
 
     /// Return the frequency channel nRF24L01 operates on.
     ///
     /// The actual frequency will we the channel +2400 MHz.
-    pub fn channel(&mut self) -> Result<u8, SPIErr, PinErr> {
+    pub fn channel(&mut self) -> Result<u8, TransferError<SPIErr, PinErr>> {
         self.read_register(Register::RF_CH)
     }
 
@@ -412,7 +414,7 @@ where
     /// ```rust
     /// nrf24l01.set_address_width(5)?;
     /// ```
-    pub fn set_address_width<T>(&mut self, width: T) -> Result<(), SPIErr, PinErr>
+    pub fn set_address_width<T>(&mut self, width: T) -> Result<(), TransferError<SPIErr, PinErr>>
     where
         T: Into<AddressWidth>,
     {
@@ -421,12 +423,12 @@ where
     }
 
     /// Return the current data rate.
-    pub fn data_rate(&mut self) -> Result<DataRate, SPIErr, PinErr> {
+    pub fn data_rate(&mut self) -> Result<DataRate, TransferError<SPIErr, PinErr>> {
         self.read_register(Register::RF_SETUP).map(DataRate::from)
     }
 
     /// Return the current power amplifier level.
-    pub fn power_amp_level(&mut self) -> Result<PALevel, SPIErr, PinErr> {
+    pub fn power_amp_level(&mut self) -> Result<PALevel, TransferError<SPIErr, PinErr>> {
         self.read_register(Register::RF_SETUP).map(PALevel::from)
     }
 
@@ -436,7 +438,7 @@ where
     /// ```rust
     /// nrf24l01.flush_tx()?;
     /// ```
-    pub fn flush_tx(&mut self) -> Result<(), SPIErr, PinErr> {
+    pub fn flush_tx(&mut self) -> Result<(), TransferError<SPIErr, PinErr>> {
         self.send_command(Instruction::FTX).map(|_| ())
     }
 
@@ -446,7 +448,7 @@ where
     /// ```rust
     /// nrf24l01.flush_rx()?;
     /// ```
-    pub fn flush_rx(&mut self) -> Result<(), SPIErr, PinErr> {
+    pub fn flush_rx(&mut self) -> Result<(), TransferError<SPIErr, PinErr>> {
         self.send_command(Instruction::FRX).map(|_| ())
     }
 
@@ -458,19 +460,29 @@ where
     /// ```rust
     /// chip.enable_crc(EncodingScheme::R2Bytes)?;
     /// ```
-    pub fn enable_crc(&mut self, scheme: EncodingScheme) -> Result<(), SPIErr, PinErr> {
+    pub fn enable_crc(
+        &mut self,
+        scheme: EncodingScheme,
+    ) -> Result<(), TransferError<SPIErr, PinErr>> {
         self.write_register(Register::CONFIG, (1 << 3) | (scheme.scheme() << 2))
     }
 
     /// Configure the data rate and PA level.
-    pub fn configure(&mut self, data_rate: DataRate, level: PALevel) -> Result<(), SPIErr, PinErr> {
+    pub fn configure(
+        &mut self,
+        data_rate: DataRate,
+        level: PALevel,
+    ) -> Result<(), TransferError<SPIErr, PinErr>> {
         self.setup_rf(data_rate, level)
     }
 
     /// Set the payload size.
     ///
     /// Values bigger than [MAX_PAYLOAD_SIZE](constant.MAX_PAYLOAD_SIZE.html) will be set to the maximum
-    pub fn set_payload_size(&mut self, payload_size: u8) -> Result<(), SPIErr, PinErr> {
+    pub fn set_payload_size(
+        &mut self,
+        payload_size: u8,
+    ) -> Result<(), TransferError<SPIErr, PinErr>> {
         let payload_size = core::cmp::min(MAX_PAYLOAD_SIZE, payload_size);
         self.payload_size = PayloadSize::Static(payload_size);
         self.write_register(Register::RX_PW_P0, payload_size)?;
@@ -493,7 +505,7 @@ where
     }
 
     /// Reads the status register from device.
-    pub fn status(&mut self) -> Result<Status, SPIErr, PinErr> {
+    pub fn status(&mut self) -> Result<Status, TransferError<SPIErr, PinErr>> {
         self.send_command(Instruction::NOP)
     }
 
@@ -501,7 +513,7 @@ where
     /// - data ready RX fifo interrupt
     /// - data sent TX fifo interrupt
     /// - maximum number of number of retries interrupt
-    pub fn reset_status(&mut self) -> Result<(), SPIErr, PinErr> {
+    pub fn reset_status(&mut self) -> Result<(), TransferError<SPIErr, PinErr>> {
         self.write_register(Register::STATUS, Self::STATUS_RESET)
     }
 
@@ -509,7 +521,10 @@ where
     ///
     /// Returns the status recieved from the device.
     /// Normally used for the other instructions than read and write.  
-    fn send_command(&mut self, instruction: Instruction) -> Result<Status, SPIErr, PinErr> {
+    fn send_command(
+        &mut self,
+        instruction: Instruction,
+    ) -> Result<Status, TransferError<SPIErr, PinErr>> {
         self.send_command_bytes(instruction, &[])
     }
 
@@ -520,20 +535,18 @@ where
         &mut self,
         instruction: Instruction,
         buf: &[u8],
-    ) -> Result<Status, SPIErr, PinErr> {
+    ) -> Result<Status, TransferError<SPIErr, PinErr>> {
         // Use tx buffer to copy the values into
         // First byte will be the opcode
         self.tx_buf[0] = instruction.opcode();
         self.tx_buf[1..=buf.len()].copy_from_slice(buf);
         // Write to spi
-        self.ncs.set_low().map_err(Error::Pin)?;
-        let r = self
-            .spi
-            .transfer(&mut self.tx_buf[..=buf.len()])
-            .map_err(Error::Spi)?;
-        self.ncs.set_high().map_err(Error::Pin)?;
+        self.set_ncs_low()?;
+        let r = self.spi_transfer_tx_buf(buf.len())?;
+        let status = Status::from(r[0]);
+        self.set_ncs_high()?;
 
-        Ok(Status::from(r[0]))
+        Ok(status)
     }
 
     /// Writes values to a given register.
@@ -546,7 +559,7 @@ where
         &mut self,
         register: Register,
         buf: T,
-    ) -> Result<(), SPIErr, PinErr> {
+    ) -> Result<(), TransferError<SPIErr, PinErr>> {
         let buf = buf.into_buf();
         // Use tx buffer to copy the values into
         // First byte will be the opcode
@@ -554,29 +567,103 @@ where
         // Copy over the values
         self.tx_buf[1..=buf.len()].copy_from_slice(buf);
         // Write to spi
-        self.ncs.set_low().map_err(Error::Pin)?;
-        self.spi
-            .write(&self.tx_buf[..=buf.len()])
-            .map_err(Error::Spi)?;
-        self.ncs.set_high().map_err(Error::Pin)?;
+        self.set_ncs_low()?;
+        self.spi_write_tx_buf(buf.len())?;
+        self.set_ncs_high()?;
 
         Ok(())
     }
 
-    fn read_register(&mut self, register: Register) -> Result<u8, SPIErr, PinErr> {
-        let mut buffer = [Instruction::RR.opcode() | register.addr(), 0];
-        self.ncs.set_low().map_err(Error::Pin)?;
-        self.spi.transfer(&mut buffer).map_err(Error::Spi)?;
-        self.ncs.set_high().map_err(Error::Pin)?;
-        Ok(buffer[1])
+    fn read_register(&mut self, register: Register) -> Result<u8, TransferError<SPIErr, PinErr>> {
+        self.tx_buf[..2].copy_from_slice(&[Instruction::RR.opcode() | register.addr(), 0]);
+        self.set_ncs_low()?;
+        let reg = self.spi_transfer_tx_buf(2)?[1];
+        self.set_ncs_high()?;
+        Ok(reg)
     }
 
-    fn setup_rf(&mut self, data_rate: DataRate, level: PALevel) -> Result<(), SPIErr, PinErr> {
+    fn setup_rf(
+        &mut self,
+        data_rate: DataRate,
+        level: PALevel,
+    ) -> Result<(), TransferError<SPIErr, PinErr>> {
         self.write_register(Register::RF_SETUP, data_rate.rate() | level.level())
     }
 
     fn is_powered_up(&self) -> bool {
         self.config_reg & (1 << 1) != 0
+    }
+}
+
+/// Helper functions for setting Chip Select pin.
+/// Returns the error enum defined in this crate, so the rest of the code can use the
+/// `?` operator.
+impl<SPI, CE, NCS, PinErr> Nrf24l01<SPI, CE, NCS>
+where
+    NCS: OutputPin<Error = PinErr>,
+{
+    fn set_ncs_high<SPIErr>(&mut self) -> Result<(), TransferError<SPIErr, PinErr>> {
+        self.ncs.set_high().map_err(TransferError::Pin)
+    }
+    fn set_ncs_low<SPIErr>(&mut self) -> Result<(), TransferError<SPIErr, PinErr>> {
+        self.ncs.set_high().map_err(TransferError::Pin)
+    }
+}
+
+/// Helper functions for setting Chip Enable pin.
+/// Returns the error enum defined in this crate, so the rest of the code can use the
+/// `?` operator.
+impl<SPI, CE, NCS, PinErr> Nrf24l01<SPI, CE, NCS>
+where
+    CE: OutputPin<Error = PinErr>,
+{
+    fn set_ce_high<SPIErr>(&mut self) -> Result<(), TransferError<SPIErr, PinErr>> {
+        self.ce.set_high().map_err(TransferError::Pin)
+    }
+    fn set_ce_low<SPIErr>(&mut self) -> Result<(), TransferError<SPIErr, PinErr>> {
+        self.ce.set_high().map_err(TransferError::Pin)
+    }
+}
+
+/// Helper function for transfering data over the SPI bus.
+/// Returns the error enum defined in this crate, so the rest of the code can use the
+/// `?` operator.
+impl<SPI, CE, NCS, SPIErr> Nrf24l01<SPI, CE, NCS>
+where
+    SPI: Transfer<u8, Error = SPIErr>,
+{
+    /// *NOTE*
+    /// Make sure the data to be transfered is copied to the TX Buf before calling this function.
+    /// Because the first byte always has to be the command, the `len` argument
+    /// is the inclusive length.
+    fn spi_transfer_tx_buf<PinErr>(
+        &mut self,
+        len: usize,
+    ) -> Result<&[u8], TransferError<SPIErr, PinErr>> {
+        self.spi
+            .transfer(&mut self.tx_buf[..=len])
+            .map_err(TransferError::Spi)
+    }
+}
+
+/// Helper function for writing data over the SPI bus.
+/// Returns the error enum defined in this crate, so the rest of the code can use the
+/// `?` operator.
+impl<SPI, CE, NCS, SPIErr> Nrf24l01<SPI, CE, NCS>
+where
+    SPI: Write<u8, Error = SPIErr>,
+{
+    /// *NOTE*
+    /// Make sure the data to be written is copied to the TX Buf before calling this function.
+    /// Because the first byte always has to be the command, the `len` argument
+    /// is the inclusive length.
+    fn spi_write_tx_buf<PinErr>(
+        &mut self,
+        len: usize,
+    ) -> Result<(), TransferError<SPIErr, PinErr>> {
+        self.spi
+            .write(&mut self.tx_buf[..=len])
+            .map_err(TransferError::Spi)
     }
 }
 
