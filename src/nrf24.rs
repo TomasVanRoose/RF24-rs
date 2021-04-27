@@ -186,15 +186,25 @@ where
     /// Opens a reading pipe.
     ///
     /// Call this before calling [start_listening()](#method.start_listening).
-    pub fn open_reading_pipe(&mut self, mut addr: &[u8]) -> Result<(), SPIErr, PinErr> {
+    pub fn open_reading_pipe(
+        &mut self,
+        pipe: DataPipe,
+        mut addr: &[u8],
+    ) -> Result<(), SPIErr, PinErr> {
         if addr.len() > Self::MAX_ADDR_WIDTH {
             addr = &addr[0..Self::MAX_ADDR_WIDTH];
         }
-        self.write_register(Register::RX_ADDR_P0, addr)?;
 
-        // Enable RX Addr 0
-        let old_reg = self.read_register(Register::EN_RXADDR)?;
-        self.write_register(Register::EN_RXADDR, old_reg | 1)?;
+        // Get the memory map address corresponding to the data pipe.
+        let rx_address_reg: Register = pipe.into();
+        match pipe {
+            DataPipe::DP0 | DataPipe::DP1 => self.write_register(rx_address_reg, addr)?,
+            _ => self.write_register(rx_address_reg, addr[0])?,
+        }
+
+        // Enable corresponding RX Addr
+        let old_reg = self.read_register(Register::EN_RXADDR)?; // Read old value
+        self.write_register(Register::EN_RXADDR, old_reg | (1 << pipe.pipe()))?; // Update
 
         Ok(())
     }

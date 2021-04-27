@@ -1,5 +1,5 @@
 //! Different structs and values for configuration of the chip
-
+use crate::register_acces::Register;
 use crate::MAX_PAYLOAD_SIZE;
 #[cfg(feature = "micro-fmt")]
 use ufmt::{uDebug, uWrite, Formatter};
@@ -279,6 +279,19 @@ impl From<u8> for DataPipe {
             4 => DataPipe::DP4,
             5 => DataPipe::DP5,
             _ => DataPipe::DP0,
+        }
+    }
+}
+
+impl Into<Register> for DataPipe {
+    fn into(self) -> Register {
+        match self {
+            DataPipe::DP0 => Register::RX_ADDR_P0,
+            DataPipe::DP1 => Register::RX_ADDR_P1,
+            DataPipe::DP2 => Register::RX_ADDR_P2,
+            DataPipe::DP3 => Register::RX_ADDR_P3,
+            DataPipe::DP4 => Register::RX_ADDR_P4,
+            DataPipe::DP5 => Register::RX_ADDR_P5,
         }
     }
 }
