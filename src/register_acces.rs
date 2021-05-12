@@ -25,6 +25,8 @@ pub(crate) enum Register {
     RX_PW_P4 = 0x15,
     RX_PW_P5 = 0x16,
     FIFO_STATUS = 0x17,
+    DYNPD = 0x1c,
+    FEATURE = 0x1d,
 }
 
 impl Register {

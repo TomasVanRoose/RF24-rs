@@ -1,6 +1,9 @@
 //! nRF24 implementations.
 
-use crate::config::{AddressWidth, DataPipe, DataRate, EncodingScheme, NrfConfig, PALevel};
+use crate::config::{
+    AddressWidth, AutoRetransmission, DataPipe, DataRate, EncodingScheme, NrfConfig, PALevel,
+    PayloadSize,
+};
 use crate::error::TransferError;
 use crate::hal::blocking::{
     delay::DelayMs,
@@ -38,11 +41,6 @@ pub struct Nrf24l01<SPI, CE, NCS> {
     payload_size: PayloadSize,
     // Transmission buffer
     tx_buf: [u8; MAX_PAYLOAD_SIZE as usize + 1],
-}
-
-enum PayloadSize {
-    Dynamic,
-    Static(u8),
 }
 
 //type Result<T, E, F> = core::result::Result<T, Error<E, F>>;
@@ -121,7 +119,7 @@ where
         delay.delay_ms(5);
 
         // Set retries
-        chip.set_retries(config.auto_retry.delay(), config.auto_retry.count())?;
+        chip.set_retries(config.auto_retry)?;
         // Set rf
         chip.setup_rf(config.data_rate, config.pa_level)?;
         // Set payload size
@@ -362,12 +360,15 @@ where
     /// // and the retransmit count to 15.
     /// nrf24l01.set_retries(5, 15)?;
     /// ```
-    pub fn set_retries(
+    pub fn set_retries<T: Into<AutoRetransmission>>(
         &mut self,
-        delay: u8,
-        count: u8,
+        auto_retry: T,
     ) -> Result<(), TransferError<SPIErr, PinErr>> {
-        self.write_register(Register::SETUP_RETR, (delay << 4) | (count))
+        let auto_retry = auto_retry.into();
+        self.write_register(
+            Register::SETUP_RETR,
+            (auto_retry.delay() << 4) | (auto_retry.count()),
+        )
     }
 
     /// Return the delay between auto retransmissions in ms.
@@ -481,16 +482,31 @@ where
     /// Values bigger than [MAX_PAYLOAD_SIZE](constant.MAX_PAYLOAD_SIZE.html) will be set to the maximum
     pub fn set_payload_size(
         &mut self,
-        payload_size: u8,
+        payload_size: PayloadSize,
     ) -> Result<(), TransferError<SPIErr, PinErr>> {
-        let payload_size = core::cmp::min(MAX_PAYLOAD_SIZE, payload_size);
-        self.payload_size = PayloadSize::Static(payload_size);
-        self.write_register(Register::RX_PW_P0, payload_size)?;
-        self.write_register(Register::RX_PW_P1, payload_size)?;
-        self.write_register(Register::RX_PW_P2, payload_size)?;
-        self.write_register(Register::RX_PW_P3, payload_size)?;
-        self.write_register(Register::RX_PW_P4, payload_size)?;
-        self.write_register(Register::RX_PW_P5, payload_size)
+        match payload_size {
+            PayloadSize::Static(payload_size) => {
+                if self.payload_size == PayloadSize::Dynamic {
+                    // currently dynamic payload enabled
+                    // Disable dynamic payloads
+                    let feature = self.read_register(Register::FEATURE)?;
+                    self.write_register(Register::CONFIG, feature & !(1 << 2))?;
+                }
+                self.write_register(Register::RX_PW_P0, payload_size)?;
+                self.write_register(Register::RX_PW_P1, payload_size)?;
+                self.write_register(Register::RX_PW_P2, payload_size)?;
+                self.write_register(Register::RX_PW_P3, payload_size)?;
+                self.write_register(Register::RX_PW_P4, payload_size)?;
+                self.write_register(Register::RX_PW_P5, payload_size)?;
+            }
+            PayloadSize::Dynamic => {
+                let feature = self.read_register(Register::FEATURE)?;
+                self.write_register(Register::CONFIG, feature | (1 << 2))?;
+                self.write_register(Register::DYNPD, 0b0001_1111)?; // enable on all pipes
+            }
+        }
+        self.payload_size = payload_size;
+        Ok(())
     }
 
     /// Get the payload size.

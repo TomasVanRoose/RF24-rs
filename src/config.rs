@@ -4,33 +4,38 @@ use crate::MAX_PAYLOAD_SIZE;
 #[cfg(feature = "micro-fmt")]
 use ufmt::{uDebug, uWrite, Formatter};
 
+const MAX_CHANNEL: u8 = 125;
+
 /// Configuration struct for NRF chip
 #[derive(Copy, Debug, Clone)]
 pub struct NrfConfig {
-    pub(crate) payload_size: u8,
+    pub(crate) payload_size: PayloadSize,
     pub(crate) channel: u8,
     pub(crate) addr_width: AddressWidth,
     pub(crate) data_rate: DataRate,
     pub(crate) pa_level: PALevel,
     pub(crate) crc_encoding_scheme: Option<EncodingScheme>,
-    pub(crate) dynamic_payloads_enabled: bool,
     pub(crate) ack_payloads_enabled: bool,
     pub(crate) auto_retry: AutoRetransmission,
 }
 
 impl NrfConfig {
     /// Set Payload Size
-    /// Must be a number in [1..MAX_PAYLOAD_SIZE], values outside will be clipped.
-    pub fn payload_size(&mut self, payload_size: u8) -> &Self {
-        let payload_size = core::cmp::min(payload_size, MAX_PAYLOAD_SIZE);
-        let payload_size = core::cmp::max(payload_size, 1);
-        self.payload_size = payload_size;
+    /// A value of 0 means dynamic payloads will be enabled.
+    /// Values greater than `MAX_PAYLOAD_SIZE` will be floored.
+    pub fn payload_size<T: Into<PayloadSize>>(&mut self, payload_size: T) -> &Self {
+        self.payload_size = payload_size.into();
+        self
+    }
+    /// Configure if dynamic payloads are enabled
+    pub fn enable_dynamic_payloads(&mut self) -> &Self {
+        self.payload_size = PayloadSize::Dynamic;
         self
     }
     /// Set RF channel
     /// Must be a number in [0..125], values outside will be clipped
     pub fn channel(&mut self, channel: u8) -> &Self {
-        self.channel = core::cmp::min(channel, 125);
+        self.channel = core::cmp::min(channel, MAX_CHANNEL);
         self
     }
     /// Set the Address Width
@@ -55,11 +60,6 @@ impl NrfConfig {
         self.crc_encoding_scheme = crc_encoding_scheme;
         self
     }
-    /// Configure if dynamic payloads are enabled
-    pub fn dynamic_payloads_enabled(&mut self, dynamic_payloads_enabled: bool) -> &Self {
-        self.dynamic_payloads_enabled = dynamic_payloads_enabled;
-        self
-    }
     /// Configure if auto acknowledgements are enabled
     pub fn ack_payloads_enabled(&mut self, ack_payloads_enabled: bool) -> &Self {
         self.ack_payloads_enabled = ack_payloads_enabled;
@@ -75,13 +75,12 @@ impl NrfConfig {
 impl Default for NrfConfig {
     fn default() -> Self {
         Self {
-            payload_size: MAX_PAYLOAD_SIZE,
             channel: 76,
+            payload_size: PayloadSize::default(),
             addr_width: AddressWidth::default(),
             crc_encoding_scheme: Some(EncodingScheme::R2Bytes),
             pa_level: PALevel::default(),
             data_rate: DataRate::default(),
-            dynamic_payloads_enabled: false,
             ack_payloads_enabled: false,
             auto_retry: AutoRetransmission::default(),
         }
@@ -142,6 +141,27 @@ impl uDebug for PALevel {
             PALevel::Low => f.write_str("Low PA level (-12 dBm)"),
             PALevel::High => f.write_str("High PA level (-6 dBm)"),
             PALevel::Max => f.write_str("Max PA level (0 dBm)"),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum PayloadSize {
+    Dynamic,
+    Static(u8),
+}
+
+impl Default for PayloadSize {
+    fn default() -> Self {
+        Self::Static(MAX_PAYLOAD_SIZE)
+    }
+}
+
+impl From<u8> for PayloadSize {
+    fn from(size: u8) -> Self {
+        match size {
+            0 => Self::Dynamic,
+            n => Self::Static(core::cmp::min(n, MAX_PAYLOAD_SIZE)),
         }
     }
 }
