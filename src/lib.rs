@@ -28,7 +28,7 @@
 extern crate embedded_hal as hal;
 use hal::spi;
 
-mod config;
+pub mod config;
 mod error;
 mod nrf24;
 mod register_acces;

@@ -606,7 +606,7 @@ where
         self.ncs.set_high().map_err(TransferError::Pin)
     }
     fn set_ncs_low<SPIErr>(&mut self) -> Result<(), TransferError<SPIErr, PinErr>> {
-        self.ncs.set_high().map_err(TransferError::Pin)
+        self.ncs.set_low().map_err(TransferError::Pin)
     }
 }
 
@@ -621,7 +621,7 @@ where
         self.ce.set_high().map_err(TransferError::Pin)
     }
     fn set_ce_low<SPIErr>(&mut self) -> Result<(), TransferError<SPIErr, PinErr>> {
-        self.ce.set_high().map_err(TransferError::Pin)
+        self.ce.set_low().map_err(TransferError::Pin)
     }
 }
 

@@ -18,6 +18,60 @@ pub struct NrfConfig {
     pub(crate) auto_retry: AutoRetransmission,
 }
 
+impl NrfConfig {
+    /// Set Payload Size
+    /// Must be a number in [1..MAX_PAYLOAD_SIZE], values outside will be clipped.
+    pub fn payload_size(&mut self, payload_size: u8) -> &Self {
+        let payload_size = core::cmp::min(payload_size, MAX_PAYLOAD_SIZE);
+        let payload_size = core::cmp::max(payload_size, 1);
+        self.payload_size = payload_size;
+        self
+    }
+    /// Set RF channel
+    /// Must be a number in [0..125], values outside will be clipped
+    pub fn channel(&mut self, channel: u8) -> &Self {
+        self.channel = core::cmp::min(channel, 125);
+        self
+    }
+    /// Set the Address Width
+    /// If using a number, it must be in [3..5], values outside will be clipped
+    pub fn addr_width<T: Into<AddressWidth>>(&mut self, addr_width: T) -> &Self {
+        self.addr_width = addr_width.into();
+        self
+    }
+    /// Set the Data Rate
+    pub fn data_rate(&mut self, data_rate: DataRate) -> &Self {
+        self.data_rate = data_rate;
+        self
+    }
+    /// Set the Power Amplification Level
+    pub fn pa_level(&mut self, pa_level: PALevel) -> &Self {
+        self.pa_level = pa_level;
+        self
+    }
+    /// Set the Cyclic Redundancy Check Encodign Scheme
+    /// None will disable the CRC.
+    pub fn crc_encoding_scheme(&mut self, crc_encoding_scheme: Option<EncodingScheme>) -> &Self {
+        self.crc_encoding_scheme = crc_encoding_scheme;
+        self
+    }
+    /// Configure if dynamic payloads are enabled
+    pub fn dynamic_payloads_enabled(&mut self, dynamic_payloads_enabled: bool) -> &Self {
+        self.dynamic_payloads_enabled = dynamic_payloads_enabled;
+        self
+    }
+    /// Configure if auto acknowledgements are enabled
+    pub fn ack_payloads_enabled(&mut self, ack_payloads_enabled: bool) -> &Self {
+        self.ack_payloads_enabled = ack_payloads_enabled;
+        self
+    }
+    /// Set the automatic retransmission config
+    pub fn auto_retry<T: Into<AutoRetransmission>>(&mut self, auto_retry: T) -> &Self {
+        self.auto_retry = auto_retry.into();
+        self
+    }
+}
+
 impl Default for NrfConfig {
     fn default() -> Self {
         Self {
@@ -216,6 +270,15 @@ impl AutoRetransmission {
     }
     pub fn count(&self) -> u8 {
         self.count
+    }
+}
+
+impl From<(u8, u8)> for AutoRetransmission {
+    fn from((d, c): (u8, u8)) -> Self {
+        Self {
+            delay: core::cmp::min(d, 15),
+            count: core::cmp::min(c, 15),
+        }
     }
 }
 
