@@ -2,6 +2,11 @@
 This crate provides a platform agnostic Rust driver for the nRF24L01 single chip 2.4 GHz
 transceiver by Nordic Semiconduct for communicating data wirelessly using the [`embedded-hal`](https://github.com/rust-embedded/embedded-hal) traits.
 
+![Docs](https://docs.rs/nrf24-rs/badge.svg)
+[![License](https://img.shields.io/badge/License-Apache%202.0-brightgreen.svg)](LICENSE-APACHE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE-MIT)
+
+[Documentation](https://docs.rs/nrf24-rs/)
 
 ## Device
 The nRF24L01 transceiver module, manufactured by [Nordic Semiconductor](https://www.nordicsemi.com), is designed to operate in 2.4 GHz worldwide ISM frequency band and uses GFSK modulation for data transmission.
