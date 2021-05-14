@@ -14,6 +14,10 @@ readme = "README.md"
 edition = "2018"
 rust = "1.50.0"
 
+exclude = [
+    "examples/",
+]
+
 [features]
 micro-fmt = ["ufmt"]
 
