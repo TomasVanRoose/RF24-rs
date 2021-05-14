@@ -1,7 +1,6 @@
 [package]
-name = "RF24-rs"
+name = "nrf24-rs"
 version = "0.1.0"
-rust = "1.50.0"
 authors = ["Tomas Van Roose <tomas.vanroose@gmail.com>"]
 repository = "https://github.com/TomasVanRoose/RF24-rs"
 license = "Apache-2.0"
@@ -13,6 +12,7 @@ categories = ["embedded", "hardware-support", "no-std"]
 homepage = "https://github.com/TomasVanRoose/RF24-rs"
 readme = "README.md"
 edition = "2018"
+rust = "1.50.0"
 
 [features]
 micro-fmt = ["ufmt"]

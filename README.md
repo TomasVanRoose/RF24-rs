@@ -10,11 +10,11 @@ The data transfer rate can be one of 250kbps, 1Mbps and 2Mbps.
 
 ## Usage
 
-This crate can be used by adding `rf24-rs` to your dependencies in your project's `Cargo.toml`.
+This crate can be used by adding `nrf24-rs` to your dependencies in your project's `Cargo.toml`.
 
 ```toml
 [dependencies]
-rf24-rs = "0.1"
+nrf24-rs = "0.1"
 ```
 
 ## Examples
@@ -34,7 +34,7 @@ rf24-rs = "0.1"
 - [x] write 
 - [x] openWritingPipe 
 - [x] openReadingPipe 
-- [ ] allow for multiple reading pipes
+- [x] allow for multiple reading pipes
 
 ## License
 

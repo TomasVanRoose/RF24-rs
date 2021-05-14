@@ -318,12 +318,12 @@ where
     }
 
     /// Reads the available payload. To check if there are any payloads available, call
-    /// [`data_available()`](method#data_available()).
+    /// [`data_available()`](#method.data_available).
     ///
     /// Make sure the chip is configured in listening mode and at
     /// least one data pipe is opened for reading, see:
-    /// * [`open_reading_pipe()`](method#open_reading_pipe())
-    /// * [`start_listening()`](method#start_listening())
+    /// * [`open_reading_pipe()`](#method.open_reading_pipe)
+    /// * [`start_listening()`](#method.start_listening)
     ///
     /// Returns the number of bytes read into the buffer.
     ///
@@ -399,11 +399,10 @@ where
     ///     buffer.copy_from_slice(&f.to_le_bytes());
     ///
     ///     match chip.write(&mut delay, &buffer) {
-    ///             Err(e) => eprintln!("Error while sending data {:?}", e),
-    ///             Ok(_) => {
-    ///                 println!("Successfully wrote the data!");
-    ///             },
-    ///         }
+    ///         Err(e) => eprintln!("Error while sending data {:?}", e),
+    ///         Ok(_) => {
+    ///             println!("Successfully wrote the data!");
+    ///         },
     ///     }
     ///     // Wait some time before trying again
     ///     delay.delay_us(50u16);
