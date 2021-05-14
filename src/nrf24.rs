@@ -19,11 +19,14 @@ use core::fmt;
 
 /// The nRF24L01 driver type. This struct encapsulates all functionality.
 ///
+/// For the different configuration options see: [`NrfConfig`].
+///
 /// # Examples
 /// ```
-/// use nrf24::{Nrf24l01, MAX_PAYLOAD_SIZE};
+/// use nrf24::Nrf24l01;
+/// use nrf24::config::NrfConfig;
 ///
-/// // Initialized and started up chip
+/// // Initialize the chip with deafault configuration.
 /// let nrf24 = Nrf24l01::new(spi, ce, ncs, &mut delay, NrfConfig::default()).unwrap();
 ///
 /// ```
@@ -54,7 +57,7 @@ where
     const STATUS_RESET: u8 = 0b01110000;
 
     /// Creates a new nrf24l01 driver with given config.
-    /// Stars up the device, so calling [`power_up()`](#method.power_up) isn't necessary.
+    /// Starts up the device after initialization, so calling [`power_up()`](#method.power_up) is not necessary.
     ///
     /// # Examples
     /// ```
@@ -75,7 +78,7 @@ where
     ///     clock: SerialClockRate::OscfOver4,
     ///     // The required SPI mode for communication with the nrf chip is specified in
     ///     // this crate
-    ///     mode: nrf24_rs::MODE,
+    ///     mode: nrf24_rs::SPI_MODE,
     /// };
     /// let (spi, ncs) = spi::Spi::new(dp.SPI, sclk, mosi, miso, ncs, settings);
     /// let mut delay = hal::delay::Delay::<clock::MHz16>::new();
@@ -314,13 +317,46 @@ where
         Ok(self.status()?.data_pipe_available())
     }
 
-    /// Read the available payload.
+    /// Reads the available payload. To check if there are any payloads available, call
+    /// [`data_available()`](method#data_available()).
+    ///
+    /// Make sure the chip is configured in listening mode and at
+    /// least one data pipe is opened for reading, see:
+    /// * [`open_reading_pipe()`](method#open_reading_pipe())
+    /// * [`start_listening()`](method#start_listening())
+    ///
+    /// Returns the number of bytes read into the buffer.
     ///
     /// # Examples
     /// ```rust
-    /// ```
+    /// // We will be receiving float values
+    /// // Set the payload size to 4 bytes, the size of an f32
+    /// let config = NrfConfig::default().payload_size(PayloadSize::Static(4));
+    /// let chip = Nrf24l01::new(spi, ce, ncs, &mut delay, config).unwrap();
+    /// // Put the chip in listening mode
+    /// chip.open_reading_pipe(DataPipe::DP0, b"Node1");
+    /// chip.start_listening();
     ///
-    /// Returns the number of bytes read into the buffer.
+    /// // The buffer where we will read the data into
+    /// let mut buffer = [0u8; 4];
+    /// loop {
+    ///     // Keep reading data if any is available
+    ///     while let Ok(true) = chip.data_available() {
+    ///         match chip.read(&mut buffer) {
+    ///             Err(e) => eprintln!("Error while reading data from buffer: {:?}", e),
+    ///             Ok(n) => {
+    ///                 println!("Successfully read {} bytes of data!", n);
+    ///                 assert_eq!(n, 4);
+    ///                 // reinterpret memory as a float
+    ///                 let f = f32::from_le_bytes(buffer);
+    ///                 println!("Received value: {}", f);
+    ///             },
+    ///         }
+    ///     }
+    ///     // Wait some time before trying again
+    ///     delay.delay_us(50u16);
+    /// }
+    /// ```
     pub fn read(&mut self, buf: &mut [u8]) -> Result<usize, TransferError<SPIErr, PinErr>> {
         let len = if let PayloadSize::Static(n) = self.payload_size {
             n as usize
@@ -343,11 +379,37 @@ where
         Ok(len)
     }
 
-    /// Writes data on the opened channel
+    /// Writes data to the opened channel.
     ///
     /// # Examples
     /// ```rust
+    /// // We will be sending float values
+    /// // Set the payload size to 4 bytes, the size of an f32
+    /// let config = NrfConfig::default().payload_size(PayloadSize::Static(4));
+    /// let chip = Nrf24l01::new(spi, ce, ncs, &mut delay, config).unwrap();
+    /// // Put the chip in transmission mode
+    /// chip.open_writing_pipe(b"Node1");
+    /// chip.stop_listening();
+    ///
+    /// // The buffer where we will write data into before sending
+    /// let mut buffer = [0u8; 4];
+    /// loop {
+    ///     let f = get_reading(); // data from some sensor
+    ///     // reinterpret float to bytes and put into buffer
+    ///     buffer.copy_from_slice(&f.to_le_bytes());
+    ///
+    ///     match chip.write(&mut delay, &buffer) {
+    ///             Err(e) => eprintln!("Error while sending data {:?}", e),
+    ///             Ok(_) => {
+    ///                 println!("Successfully wrote the data!");
+    ///             },
+    ///         }
+    ///     }
+    ///     // Wait some time before trying again
+    ///     delay.delay_us(50u16);
+    /// }
     /// ```
+    ///
     /// Will clear all interrupt flags after write.
     /// Returns an error when max retries have been reached.
     pub fn write<D: DelayUs<u8>>(
@@ -659,7 +721,7 @@ where
         Ok(())
     }
 
-    /// Reads the status register from device.
+    /// Reads the status register from device. See [`Status`].
     pub fn status(&mut self) -> Result<Status, TransferError<SPIErr, PinErr>> {
         self.send_command(Instruction::NOP)
     }

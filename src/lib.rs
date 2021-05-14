@@ -32,11 +32,10 @@ pub mod config;
 mod error;
 mod nrf24;
 mod register_acces;
-mod status;
+pub mod status;
 
 pub use crate::error::TransferError;
 pub use crate::nrf24::Nrf24l01;
-pub use crate::status::{FIFOStatus, Status};
 
 /// SPI mode. Use this when initializing the SPI instance.
 pub const SPI_MODE: spi::Mode = spi::MODE_0;

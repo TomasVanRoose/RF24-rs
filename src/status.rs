@@ -1,3 +1,4 @@
+//! Status datastructures.
 use crate::config::DataPipe;
 #[cfg(feature = "micro-fmt")]
 use ufmt::{uDebug, uWrite, Formatter};
