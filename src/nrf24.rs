@@ -840,6 +840,39 @@ where
     }
 }
 
+#[cfg(feature = "micro-fmt")]
+impl<SPI, CE, NCS, SPIErr, PinErr> Nrf24l01<SPI, CE, NCS>
+where
+    PinErr: core::fmt::Debug,
+    SPIErr: core::fmt::Debug,
+    SPI: Transfer<u8, Error = SPIErr> + Write<u8, Error = SPIErr>,
+    NCS: OutputPin<Error = PinErr>,
+    CE: OutputPin<Error = PinErr>,
+{
+    /// Write debug information to formatter.
+    pub fn debug_write<W: ?Sized>(
+        &mut self,
+        f: &mut ufmt::Formatter<'_, W>,
+    ) -> core::result::Result<(), W::Error>
+    where
+        W: ufmt::uWrite,
+    {
+        f.debug_struct("NRF Configuration")?
+            .field("channel", &self.channel().unwrap())?
+            .field("frequency", &(self.channel().unwrap() as u16 + 2400))?
+            .field("data rate", &self.data_rate().unwrap())?
+            .field(
+                "power amplification level",
+                &self.power_amp_level().unwrap(),
+            )?
+            //.field("crc encoding scheme", &self.enco().unwrap())?
+            //.field("address length", &self.set_address_width)
+            .field("payload size", &self.payload_size())?
+            .field("auto retransmission", &self.retries().unwrap())?
+            .finish()
+    }
+}
+
 /// A trait representing a type that can be turned into a buffer.
 ///
 /// Is used for representing single values as well as slices as buffers.
