@@ -1,4 +1,19 @@
 //! Different structs and values for configuration of the chip.
+//!
+//! To construct a representation of your config, see [`NrfConfig`].
+//!
+//! # Default values
+//! All these options have a default value:
+//!
+//! * `addr_width`:             address width of 5 bytes.
+//! * `ack_payloads_enabled`:   false: acknowledgement payloads are disabled by default.
+//! * `auto_retry`:             enabled, will wait 1586µs on ack, and will retry 15 times.
+//! * `channel`:                channel 76.
+//! * `crc_encoding_scheme`:    encoding scheme with 2 bytes.
+//! * `data_rate`:              1Mbps.
+//! * `payload_size`:           static payload size of [`MAX_PAYLOAD_SIZE`] bytes.
+//! * `pa_level`:               min amplification level.
+//!
 use crate::register_acces::Register;
 use crate::MAX_PAYLOAD_SIZE;
 #[cfg(feature = "micro-fmt")]
@@ -7,6 +22,37 @@ use ufmt::{uDebug, uWrite, uwrite, Formatter};
 const MAX_CHANNEL: u8 = 125;
 
 /// Configuration builder struct for NRF chip.
+///
+/// Always created with the `default()` method and modified through
+/// the builder pattern.
+///
+/// # Example: default
+/// ```rust
+/// use nrf24::Nrf24l01;
+/// use nrf24::config::NrfConfig;
+///
+/// let config = NrfConfig::default();
+///
+/// let mut chip = Nrf24l01::new(spi, ce, ncs, delay, config)?;
+/// ```
+///
+/// # Example: custom configuration
+/// ```rust
+/// use nrf24::Nrf24l01;
+/// use nrf24::config::{PALevel, DataRate, NrfConfig, PayloadSize};
+///
+/// let config = NrfConfig::default()
+///     .payload_size(PayloadSize::Dynamic) // set dynamic payload size
+///     .channel(7)
+///     .addr_width(3),
+///     .data_rate(DataRate::R2Mbps)
+///     .pa_level(PALevel::Max)
+///     .crc_encoding_scheme(None) // disable crc
+///     .ack_payloads_enabled(true)
+///     .auto_retry((15, 15));
+///
+/// let mut chip = Nrf24l01::new(spi, ce, ncs, delay, config)?;
+/// ```
 #[derive(Copy, Debug, Clone)]
 pub struct NrfConfig {
     pub(crate) payload_size: PayloadSize,
@@ -22,14 +68,9 @@ pub struct NrfConfig {
 impl NrfConfig {
     /// Set Payload Size
     /// A value of 0 means dynamic payloads will be enabled.
-    /// Values greater than `MAX_PAYLOAD_SIZE` will be floored.
+    /// Values greater than [`MAX_PAYLOAD_SIZE`] will be floored.
     pub fn payload_size<T: Into<PayloadSize>>(mut self, payload_size: T) -> Self {
         self.payload_size = payload_size.into();
-        self
-    }
-    /// Configure if dynamic payloads are enabled
-    pub fn enable_dynamic_payloads(mut self) -> Self {
-        self.payload_size = PayloadSize::Dynamic;
         self
     }
     /// Set RF channel
