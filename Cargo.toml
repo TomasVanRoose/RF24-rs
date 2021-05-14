@@ -3,7 +3,7 @@ name = "nrf24-rs"
 version = "0.1.0"
 authors = ["Tomas Van Roose <tomas.vanroose@gmail.com>"]
 repository = "https://github.com/TomasVanRoose/RF24-rs"
-license = "Apache-2.0"
+license = "MIT or Apache-2.0"
 
 description = "Platform agnostic Rust driver for the nRF24L01 2.4 GHz transciever for wireless communication between embedded devices."
 keywords = ["driver", "nRF24L01", "wireless", "embedded-hal", "embedded-hal-driver"]
