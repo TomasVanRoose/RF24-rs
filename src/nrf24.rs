@@ -19,16 +19,14 @@ use core::fmt;
 
 /// The nRF24L01 driver type. This struct encapsulates all functionality.
 ///
-/// # Example
+/// # Examples
 /// ```
 /// use nrf24::{Nrf24l01, MAX_PAYLOAD_SIZE};
 ///
 /// // Initialized and started up chip
 /// let nrf24 = Nrf24l01::new(spi, ce, ncs, &mut delay, NrfConfig::default()).unwrap();
 ///
-///
 /// ```
-///
 pub struct Nrf24l01<SPI, CE, NCS> {
     spi: SPI,
     // SPI Chip Select Pin, active low
@@ -56,9 +54,9 @@ where
     const STATUS_RESET: u8 = 0b01110000;
 
     /// Creates a new nrf24l01 driver with given config.
-    /// Stars up the device, so calling `power_up` isn't necessary.
+    /// Stars up the device, so calling [`power_up()`](#method.power_up) isn't necessary.
     ///
-    /// # Example
+    /// # Examples
     /// ```
     /// // Initialize all pins required
     /// let dp = Peripherals::take()::unwrap();
@@ -79,8 +77,7 @@ where
     ///     // this crate
     ///     mode: nrf24_rs::MODE,
     /// };
-    /// let spi = spi::Spi::new(dp.SPI, sclk, mosi, miso, settings);
-    ///
+    /// let (spi, ncs) = spi::Spi::new(dp.SPI, sclk, mosi, miso, ncs, settings);
     /// let mut delay = hal::delay::Delay::<clock::MHz16>::new();
     ///
     /// // Construct a new instance of the chip with a default configuration
@@ -150,28 +147,13 @@ where
         }
     }
 
-    /// Power up now.
-    ///
+    /// Checks if the chip is connected to the SPI bus.
     /// # Examples
     /// ```rust
-    /// chip.power_up(&mut delay)?;
+    /// if !chip.is_connected()? {
+    ///     // Handle disconnection
+    /// }
     /// ```
-    pub fn power_up<D>(&mut self, delay: &mut D) -> Result<(), TransferError<SPIErr, PinErr>>
-    where
-        D: DelayMs<u8>,
-    {
-        // if not powered up, power up and wait for the radio to initialize
-        if !self.is_powered_up() {
-            // update the stored config register
-            self.config_reg |= 1 << 1;
-            self.write_register(Register::CONFIG, self.config_reg)?;
-
-            delay.delay_ms(5);
-        }
-        Ok(())
-    }
-
-    /// Checks if the chip is connected to the SPI bus.
     pub fn is_connected(&mut self) -> Result<bool, TransferError<SPIErr, PinErr>> {
         let setup = self.read_register(Register::SETUP_AW)?;
         if setup >= 1 && setup <= 3 {
@@ -181,14 +163,24 @@ where
         }
     }
 
-    /// Opens a reading pipe.
+    /// Opens a reading pipe for reading data on an address.
     ///
-    /// Call this before calling [start_listening()](#method.start_listening).
-    pub fn open_reading_pipe(
+    /// # Examples
+    /// ```rust
+    /// chip.open_reading_pipe(DataPipe::DP0, b"Node1")?;
+    /// ```
+    ///
+    /// `pipe` can either be an instance of the type [`DataPipe`] or an integer.
+    /// Note that if an integer is provided, numbers higher than 5 will default to reading pipe 0.
+    ///
+    /// # Warnings
+    /// You have to call this before calling [`start_listening()`](#method.start_listening).
+    pub fn open_reading_pipe<T: Into<DataPipe>>(
         &mut self,
-        pipe: DataPipe,
+        pipe: T,
         mut addr: &[u8],
     ) -> Result<(), TransferError<SPIErr, PinErr>> {
+        let pipe = pipe.into();
         if addr.len() > Self::MAX_ADDR_WIDTH {
             addr = &addr[0..Self::MAX_ADDR_WIDTH];
         }
@@ -207,8 +199,13 @@ where
         Ok(())
     }
 
-    /// Opens a writing pipe.
-    ///
+    /// Opens a writing pipe for writing data to an address.
+    /// # Examples
+    /// ```rust
+    /// // Open writing pipe for address "Node1"
+    /// chip.open_writing_pipe(b"Node1")?;
+    /// ```
+    /// # Warnings
     /// Must be called before writing data.
     pub fn open_writing_pipe(
         &mut self,
@@ -229,9 +226,18 @@ where
     /// Starts listening on the pipes that are opened for reading.
     /// Used in Receiver Mode.
     ///
-    /// Make sure [open_reading_pipe()](#method.open_reading_pipe) is called first.
+    /// # Examples
+    /// ```rust
+    /// // First open data pipe 0 with address "Node1"
+    /// chip.open_reading_pipe(DataPipe::DP0, b"Node1")?;
+    /// // Configure the chip to listening modes (non blocking)
+    /// chip.start_listening()
+    /// // Now we can check for available messages and read them
+    /// ```
+    /// # Warnings
+    /// Make sure at least one pipe is opened for reading using the [`open_reading_pipe()`](#method.open_reading_pipe) method.
     ///
-    /// TODO: Use the type system to make start and stop listening by RAII and Drop
+    // TODO: Use the type system to make start and stop listening by RAII and Drop
     pub fn start_listening(&mut self) -> Result<(), TransferError<SPIErr, PinErr>> {
         // Enable RX listening flag
         self.config_reg |= 1;
@@ -244,9 +250,19 @@ where
         Ok(())
     }
 
-    /// Stop listening.
+    /// Stops listening.
     ///
-    /// TODO: Use the type system to make start and stop listening by RAII and Drop
+    /// # Examples
+    /// ```rust
+    /// // Configure chip and start listening
+    /// chip.open_reading_pipe(DataPipe::DP0, b"Node1")?;
+    /// chip.start_listening()?;
+    /// // ... read data
+    /// // Reading is done, now we can stop listening
+    /// chip.stop_listening()?;
+    /// ```
+    ///
+    // TODO: Use the type system to make start and stop listening by RAII and Drop
     pub fn stop_listening(&mut self) -> Result<(), TransferError<SPIErr, PinErr>> {
         self.set_ce_low()?;
 
@@ -256,12 +272,42 @@ where
         Ok(())
     }
 
-    /// Check if there are any bytes available to be read.
+    /// Checks if there are any bytes available to be read.
+    ///
+    /// # Examples
+    /// ```rust
+    /// // Chip has to be set in listening mode first
+    /// chip.open_reading_pipe(DataPipe::DP0, b"Node1")?;
+    /// chip.start_listening()?;
+    /// // Check if there is any data to read
+    /// while chip.data_available()? {
+    ///     // ... read the payload
+    ///     delay.delay_ms(50); // small delay between calls of data_available
+    /// }
+    /// ```
+    ///
+    /// # Notes
+    /// If data_available is called in too rapid succession, the chip can glitch out.
+    /// If this is the case, just add a small delay between calling successive `data_available`.
     pub fn data_available(&mut self) -> Result<bool, TransferError<SPIErr, PinErr>> {
         Ok(self.data_available_on_pipe()?.is_some())
     }
 
     /// Returns the data pipe where the data is available and `None` if no data available.
+    ///
+    /// # Examples
+    /// ```rust
+    /// // Chip has to be set in listening mode first
+    /// chip.open_reading_pipe(DataPipe::DP0, b"Node1")?;
+    /// chip.start_listening()?;
+    /// // Check if there is any data to read on pipe 1
+    /// while let Some(pipe) = chip.data_available_on_pipe()? {
+    ///     if pipe == DataPipe::DP1 {
+    ///         // ... read the payload
+    ///         delay.delay_ms(50); // small delay between calls of data_available
+    ///     }
+    /// }
+    /// ```
     pub fn data_available_on_pipe(
         &mut self,
     ) -> Result<Option<DataPipe>, TransferError<SPIErr, PinErr>> {
@@ -269,6 +315,10 @@ where
     }
 
     /// Read the available payload.
+    ///
+    /// # Examples
+    /// ```rust
+    /// ```
     ///
     /// Returns the number of bytes read into the buffer.
     pub fn read(&mut self, buf: &mut [u8]) -> Result<usize, TransferError<SPIErr, PinErr>> {
@@ -295,8 +345,11 @@ where
 
     /// Writes data on the opened channel
     ///
+    /// # Examples
+    /// ```rust
+    /// ```
     /// Will clear all interrupt flags after write.
-    /// Returns an error when max retries has been reached.
+    /// Returns an error when max retries have been reached.
     pub fn write<D: DelayUs<u8>>(
         &mut self,
         delay: &mut D,
@@ -358,7 +411,7 @@ where
     /// ```rust
     /// // Set the auto transmit delay to (5 + 1) * 250) + 86 = 1586µs
     /// // and the retransmit count to 15.
-    /// nrf24l01.set_retries(5, 15)?;
+    /// nrf24l01.set_retries((5, 15))?;
     /// ```
     pub fn set_retries<T: Into<AutoRetransmission>>(
         &mut self,
@@ -367,21 +420,25 @@ where
         let auto_retry = auto_retry.into();
         self.write_register(
             Register::SETUP_RETR,
-            (auto_retry.delay() << 4) | (auto_retry.count()),
+            (auto_retry.raw_delay() << 4) | (auto_retry.count()),
         )
     }
 
-    /// Return the delay between auto retransmissions in ms.
-    pub fn auto_retry_delay(&mut self) -> Result<u32, TransferError<SPIErr, PinErr>> {
+    /// Returns the auto retransmission config.
+    ///
+    /// # Examples
+    /// ```rust
+    /// // Initialize the chip
+    /// let mut chip = Nrf24l01::new(spi_struct, ce_pin, ncs_pin, delay, NrfConfig::default())?;
+    ///
+    /// let retries_config = chip.retries()?;
+    /// // Default values for the chip
+    /// assert_eq!(retries_config.delay(), 1586);
+    /// assert_eq!(retries_config.count(), 15);
+    /// ```
+    pub fn retries(&mut self) -> Result<AutoRetransmission, TransferError<SPIErr, PinErr>> {
         self.read_register(Register::SETUP_RETR)
-            .map(|raw| (raw >> 4) as u32)
-            .map(|x| ((x + 1) * 250) + 86)
-    }
-
-    /// Return the number of times there will be an auto retransmissions.
-    pub fn auto_retry_attempts(&mut self) -> Result<u8, TransferError<SPIErr, PinErr>> {
-        self.read_register(Register::SETUP_RETR)
-            .map(|x| x & 0b0000_1111)
+            .map(AutoRetransmission::from_register)
     }
 
     /// Set the frequency channel nRF24L01 operates on.
@@ -399,8 +456,15 @@ where
     }
 
     /// Return the frequency channel nRF24L01 operates on.
+    /// Note that the actual frequency will we the channel +2400 MHz.
     ///
-    /// The actual frequency will we the channel +2400 MHz.
+    /// # Examples
+    /// ```rust
+    /// // Initialize the chip
+    /// let mut chip = Nrf24l01::new(spi_struct, ce_pin, ncs_pin, delay, NrfConfig::default())?;
+    /// // Default is channel 76
+    /// assert_eq!(chip.channel()?, 76);
+    /// ```
     pub fn channel(&mut self) -> Result<u8, TransferError<SPIErr, PinErr>> {
         self.read_register(Register::RF_CH)
     }
@@ -423,12 +487,28 @@ where
         self.write_register(Register::SETUP_AW, width.value())
     }
 
-    /// Return the current data rate.
+    /// Returns the current data rate as a [`DataRate`] enum.
+    ///
+    /// # Examples
+    /// ```rust
+    /// // Initialize the chip
+    /// let mut chip = Nrf24l01::new(spi_struct, ce_pin, ncs_pin, delay, NrfConfig::default())?;
+    /// // Default is 2 Mb/s
+    /// assert_eq!(chip.data_rate()?, DataRate::R2Mbps);
+    /// ```
     pub fn data_rate(&mut self) -> Result<DataRate, TransferError<SPIErr, PinErr>> {
         self.read_register(Register::RF_SETUP).map(DataRate::from)
     }
 
-    /// Return the current power amplifier level.
+    /// Returns the current power amplifier level as a [`PALevel`] enum.
+    ///
+    /// # Examples
+    /// ```rust
+    /// // Initialize the chip
+    /// let mut chip = Nrf24l01::new(spi_struct, ce_pin, ncs_pin, delay, NrfConfig::default())?;
+    /// // Default is Min PALevel
+    /// assert_eq!(chip.power_amp_level()?, PALevel::Min);
+    /// ```
     pub fn power_amp_level(&mut self) -> Result<PALevel, TransferError<SPIErr, PinErr>> {
         self.read_register(Register::RF_SETUP).map(PALevel::from)
     }
@@ -437,7 +517,7 @@ where
     ///
     /// # Examples
     /// ```rust
-    /// nrf24l01.flush_tx()?;
+    /// chip.flush_tx()?;
     /// ```
     pub fn flush_tx(&mut self) -> Result<(), TransferError<SPIErr, PinErr>> {
         self.send_command(Instruction::FTX).map(|_| ())
@@ -468,22 +548,30 @@ where
         self.write_register(Register::CONFIG, (1 << 3) | (scheme.scheme() << 2))
     }
 
-    /// Configure the data rate and PA level.
-    pub fn configure(
-        &mut self,
-        data_rate: DataRate,
-        level: PALevel,
-    ) -> Result<(), TransferError<SPIErr, PinErr>> {
-        self.setup_rf(data_rate, level)
-    }
-
-    /// Set the payload size.
+    /// Sets the payload size in bytes.
+    /// This can either be static with a set size, or dynamic.
     ///
-    /// Values bigger than [MAX_PAYLOAD_SIZE](constant.MAX_PAYLOAD_SIZE.html) will be set to the maximum
-    pub fn set_payload_size(
+    /// `payload_size` can either be an instance of the [`PayloadSize`] enum, or an integer.
+    ///
+    /// # Notes
+    /// * A value of 0 means the dynamic payloads will be enabled.
+    /// * Values bigger than [`MAX_PAYLOAD_SIZE`](constant.MAX_PAYLOAD_SIZE.html) will be set to the maximum.
+    ///
+    /// # Examples
+    /// ```rust
+    /// // Two equal methods to set the chip to dynamic payload mode.
+    /// chip.set_payload_size(PayloadSize::Dynamic)?;
+    /// chip.set_payload_size(0)?;
+    /// // Following methods set a static payload size.
+    /// chip.set_payload_size(12)?; // Messages will be 12 bytes
+    /// chip.set_payload_size(PayloadSize::Static(12))?; // Same as previous
+    /// chip.set_payload_size(49)?; // Messages will be `MAX_PAYLOAD_SIZE`
+    /// ```
+    pub fn set_payload_size<T: Into<PayloadSize>>(
         &mut self,
-        payload_size: PayloadSize,
+        payload_size: T,
     ) -> Result<(), TransferError<SPIErr, PinErr>> {
+        let payload_size = payload_size.into().truncate();
         match payload_size {
             PayloadSize::Static(payload_size) => {
                 if self.payload_size == PayloadSize::Dynamic {
@@ -492,6 +580,7 @@ where
                     let feature = self.read_register(Register::FEATURE)?;
                     self.write_register(Register::CONFIG, feature & !(1 << 2))?;
                 }
+
                 self.write_register(Register::RX_PW_P0, payload_size)?;
                 self.write_register(Register::RX_PW_P1, payload_size)?;
                 self.write_register(Register::RX_PW_P2, payload_size)?;
@@ -509,15 +598,65 @@ where
         Ok(())
     }
 
-    /// Get the payload size.
+    /// Returns the payload size as a [`PayloadSize`] enum.
     ///
-    /// Guarantueed to be a value betwoon 1 and 32.
-    pub fn payload_size(&self) -> u8 {
-        if let PayloadSize::Static(s) = self.payload_size {
-            s
-        } else {
-            0
+    /// # Examples
+    /// ```rust
+    /// // Initialize chip
+    /// let mut chip = Nrf24l01::new(spi_struct, ce_pin, ncs_pin, delay, NrfConfig::default())?;
+    /// // Default payload size is MAX_PAYLOAD_SIZE
+    /// assert_eq!(chip.payload_size()?, PayloadSize::Static(MAX_PAYLOAD_SIZE));
+    /// ```
+    pub fn payload_size(&self) -> PayloadSize {
+        self.payload_size
+    }
+
+    /// Powers the chip up. Note that a new initialized device will already be in power up mode, so
+    /// calling [`power_up()`](#method.power_up) is not necessary.
+    ///
+    /// Should be called after [`power_down()`](#method.power_down) to put the chip back into power up mode.
+    ///
+    /// # Examples
+    /// ```rust
+    /// // Go to sleep
+    /// chip.power_down(&mut delay)?;
+    /// // Zzz
+    /// // ...
+    /// chip.power_up(&mut delay)?; // power back up
+    /// ```
+    pub fn power_up<D>(&mut self, delay: &mut D) -> Result<(), TransferError<SPIErr, PinErr>>
+    where
+        D: DelayMs<u8>,
+    {
+        // if not powered up, power up and wait for the radio to initialize
+        if !self.is_powered_up() {
+            // update the stored config register
+            self.config_reg |= 1 << 1;
+            self.write_register(Register::CONFIG, self.config_reg)?;
+
+            delay.delay_ms(5);
         }
+        Ok(())
+    }
+
+    /// Powers the chip down. This is the low power mode.
+    /// The chip will consume approximatly 900nA.
+    ///
+    /// To power the chip back up, call [`power_up()`](#method.power_up).
+    ///
+    /// # Examples
+    /// ```rust
+    /// // Go to sleep
+    /// chip.power_down(&mut delay)?;
+    /// // Zzz
+    /// // ...
+    /// chip.power_up(&mut delay)?; // power back up
+    /// ```
+    pub fn power_down(&mut self) -> Result<(), TransferError<SPIErr, PinErr>> {
+        self.set_ce_low()?;
+        self.config_reg &= !(1 << 1);
+        self.write_register(Register::CONFIG, self.config_reg)?;
+        Ok(())
     }
 
     /// Reads the status register from device.

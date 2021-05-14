@@ -1,4 +1,4 @@
-//! This crate provides a platform agnostic Rust driver for the nRF24L01 single chip 2.4 GHz
+//! This crate provides a platform agnostic Rust driver for the nRF24L01+ single chip 2.4 GHz
 //! transceiver by Nordic Semiconduct for communicating data wirelessly using the [`embedded-hal`] traits.
 //!
 //! [`embedded-hal`]: https://github.com/rust-embedded/embedded-hal
@@ -34,13 +34,11 @@ mod nrf24;
 mod register_acces;
 mod status;
 
-pub use crate::config::{DataPipe, DataRate, NrfConfig, PALevel};
 pub use crate::error::TransferError;
 pub use crate::nrf24::Nrf24l01;
 pub use crate::status::{FIFOStatus, Status};
-//pub use crate::register_acces::Register;
 
 /// SPI mode. Use this when initializing the SPI instance.
-pub const MODE: spi::Mode = spi::MODE_0;
+pub const SPI_MODE: spi::Mode = spi::MODE_0;
 /// Max size in bytes of a single payload to be sent or recieved.
 pub const MAX_PAYLOAD_SIZE: u8 = 32;
