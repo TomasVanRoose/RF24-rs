@@ -1,6 +1,6 @@
 [package]
 name = "nrf24-rs"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Tomas Van Roose <tomas.vanroose@gmail.com>"]
 repository = "https://github.com/TomasVanRoose/RF24-rs"
 license = "MIT OR Apache-2.0"
