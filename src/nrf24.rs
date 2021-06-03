@@ -13,7 +13,7 @@ use crate::hal::blocking::{
 
 use crate::hal::digital::v2::OutputPin;
 use crate::register_acces::{Instruction, Register};
-use crate::status::Status;
+use crate::status::{Interrupts, Status};
 use crate::MAX_PAYLOAD_SIZE;
 use core::fmt;
 
@@ -731,6 +731,29 @@ where
     /// - maximum number of number of retries interrupt
     pub fn reset_status(&mut self) -> Result<(), TransferError<SPIErr, PinErr>> {
         self.write_register(Register::STATUS, Self::STATUS_RESET)
+    }
+
+    /// Sets the selected interrupt flags.
+    ///
+    /// Configures which events will trigger the IRQ pin to active low.
+    ///
+    /// # Examples
+    /// ```rust
+    /// let interrupts = Interrupts::new().transmission_fail().transmission_ok();
+    /// chip.set_interrupts(interrupts)?;
+    /// ```
+    /// Enable all interrupts.
+    /// ```rust
+    /// let interrupts = Interrupts::all();
+    /// chip.set_interrupt(interrupts);
+    /// ```
+    pub fn set_interrupts(&mut self, irq: Interrupts) -> Result<(), TransferError<SPIErr, PinErr>> {
+        // Clear interrupt flags
+        self.config_reg &= !Interrupts::new().all().value();
+        // Set configured interrupt flags
+        self.config_reg |= irq.value();
+        self.write_register(Register::STATUS, self.config_reg)?;
+        Ok(())
     }
 
     /// Sends an instruction over the SPI bus without extra data.
