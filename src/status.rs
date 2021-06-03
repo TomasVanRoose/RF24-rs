@@ -54,6 +54,42 @@ impl Status {
     }
 }
 
+pub struct Interrupts(u8);
+
+impl Interrupts {
+    pub fn new() -> Self {
+        Self(0)
+    }
+    pub fn transmission_fail(mut self) -> Self {
+        self.0 |= InterruptKind::TransmissionFail as u8;
+        self
+    }
+    pub fn transmission_ok(mut self) -> Self {
+        self.0 |= InterruptKind::TransmissionOk as u8;
+        self
+    }
+    pub fn data_ready(mut self) -> Self {
+        self.0 |= InterruptKind::DataReady as u8;
+        self
+    }
+    pub fn all(mut self) -> Self {
+        self.0 |= InterruptKind::TransmissionFail as u8
+            | InterruptKind::TransmissionOk as u8
+            | InterruptKind::DataReady as u8;
+        self
+    }
+    pub(crate) fn value(&self) -> u8 {
+        self.0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InterruptKind {
+    TransmissionFail = 0b0001_0000,
+    TransmissionOk = 0b0010_0000,
+    DataReady = 0b0100_0000,
+}
+
 impl FIFOStatus {
     /// Returns `true` if there are availbe locations in transmission queue
     pub fn tx_full(&self) -> bool {

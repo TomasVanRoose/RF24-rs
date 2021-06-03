@@ -159,7 +159,7 @@ where
     /// ```
     pub fn is_connected(&mut self) -> Result<bool, TransferError<SPIErr, PinErr>> {
         let setup = self.read_register(Register::SETUP_AW)?;
-        if setup >= 1 && setup <= 3 {
+        if (1..=3).contains(&setup) {
             Ok(true)
         } else {
             Ok(false)
@@ -878,7 +878,7 @@ where
         len: usize,
     ) -> Result<(), TransferError<SPIErr, PinErr>> {
         self.spi
-            .write(&mut self.tx_buf[..=len])
+            .write(&self.tx_buf[..=len])
             .map_err(TransferError::Spi)
     }
 }
