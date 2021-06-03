@@ -749,11 +749,22 @@ where
     /// ```
     pub fn set_interrupts(&mut self, irq: Interrupts) -> Result<(), TransferError<SPIErr, PinErr>> {
         // Clear interrupt flags
-        self.config_reg &= !Interrupts::new().all().value();
+        self.config_reg &= !Interrupts::all().value();
         // Set configured interrupt flags
         self.config_reg |= irq.value();
         self.write_register(Register::STATUS, self.config_reg)?;
         Ok(())
+    }
+
+    /// Query which interrupts were triggered.
+    ///
+    /// Clears the interrupt request flags, so new ones can come in.
+    pub fn interrupt_src(&mut self) -> Result<Interrupts, TransferError<SPIErr, PinErr>> {
+        let status = self.status()?;
+        let _ = status.reached_max_retries();
+        // Clear flags
+        self.write_register(Register::STATUS, Interrupts::all().value())?;
+        Ok(Interrupts::from(status.value()))
     }
 
     /// Sends an instruction over the SPI bus without extra data.

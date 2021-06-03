@@ -72,14 +72,24 @@ impl Interrupts {
         self.0 |= InterruptKind::DataReady as u8;
         self
     }
-    pub fn all(mut self) -> Self {
-        self.0 |= InterruptKind::TransmissionFail as u8
+    pub fn all() -> Self {
+        let mut x = Self::new();
+        x.0 |= InterruptKind::TransmissionFail as u8
             | InterruptKind::TransmissionOk as u8
             | InterruptKind::DataReady as u8;
-        self
+        x
+    }
+    pub fn contains(&self, irq: InterruptKind) -> bool {
+        self.0 & irq as u8 >= 1
     }
     pub(crate) fn value(&self) -> u8 {
         self.0
+    }
+}
+
+impl From<u8> for Interrupts {
+    fn from(t: u8) -> Self {
+        Self(t & Self::all().value())
     }
 }
 
