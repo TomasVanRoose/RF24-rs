@@ -154,7 +154,7 @@ impl uDebug for NrfConfig {
 /// consumption.
 ///
 /// Defaults to Min.
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(PartialEq, Eq, Copy, Clone)]
 pub enum PALevel {
     /// -18 dBm, 7 mA current consumption.
     Min = 0b0000_0000,
@@ -189,6 +189,16 @@ impl From<u8> for PALevel {
             0b0000_0100 => Self::High,
             0b0000_0110 => Self::Max,
             _ => unreachable!(),
+        }
+    }
+}
+impl core::fmt::Debug for PALevel {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match *self {
+            PALevel::Min => f.write_str("min (-18 dBm)"),
+            PALevel::Low => f.write_str("low (-12 dBm)"),
+            PALevel::High => f.write_str("high (-6 dBm)"),
+            PALevel::Max => f.write_str("max (0 dBm)"),
         }
     }
 }
@@ -268,7 +278,7 @@ pub enum DataRate {
 
 impl DataRate {
     pub(crate) fn bitmask() -> u8 {
-        0b1111_1110
+        0b0000_1000
     }
     pub(crate) fn rate(&self) -> u8 {
         *self as u8
@@ -284,8 +294,8 @@ impl Default for DataRate {
 impl From<u8> for DataRate {
     fn from(t: u8) -> Self {
         match t & Self::bitmask() {
-            0 => Self::R1Mbps,
-            1 => Self::R2Mbps,
+            0b0000_0000 => Self::R1Mbps,
+            0b0000_1000 => Self::R2Mbps,
             _ => unreachable!(),
         }
     }
@@ -314,8 +324,22 @@ pub enum EncodingScheme {
 }
 
 impl EncodingScheme {
+    fn bitmask() -> u8 {
+        0b0000_0100
+    }
+
     pub(crate) fn scheme(&self) -> u8 {
         *self as u8
+    }
+}
+
+impl From<u8> for EncodingScheme {
+    fn from(t: u8) -> Self {
+        match t & Self::bitmask() {
+            0b0000_0000 => Self::R1Byte,
+            0b0000_0100 => Self::R2Bytes,
+            _ => unreachable!(),
+        }
     }
 }
 
@@ -388,7 +412,7 @@ impl uDebug for AddressWidth {
 ///
 /// * Auto retransmission delay has a default value of 5, which means `1586 µs`.
 /// * The chip will try to resend a failed message 15 times by default.
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(PartialEq, Eq, Copy, Clone)]
 pub struct AutoRetransmission {
     delay: u8,
     count: u8,
@@ -438,6 +462,16 @@ impl From<(u8, u8)> for AutoRetransmission {
     }
 }
 
+impl core::fmt::Debug for AutoRetransmission {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("AutoRetransmission")
+            .field("raw delay value", &self.raw_delay())
+            .field("delay (µs)", &self.delay())
+            .field("count", &self.count())
+            .finish()
+    }
+}
+
 #[cfg(feature = "micro-fmt")]
 impl uDebug for AutoRetransmission {
     fn fmt<W: ?Sized>(&self, f: &mut Formatter<'_, W>) -> core::result::Result<(), W::Error>
@@ -445,8 +479,9 @@ impl uDebug for AutoRetransmission {
         W: uWrite,
     {
         f.debug_struct("AutoRetransmission")?
-            .field("delay", &self.delay)?
-            .field("count", &self.count)?
+            .field("raw delay value", &self.raw_delay())?
+            .field("delay (µs)", &self.delay())?
+            .field("count", &self.count())?
             .finish()
     }
 }
@@ -541,5 +576,29 @@ impl uDebug for DataPipe {
             DataPipe::DP4 => f.write_str("data pipe 4"),
             DataPipe::DP5 => f.write_str("data pipe 5"),
         }
+    }
+}
+
+#[derive(Copy, Clone)]
+pub struct DebugInfo {
+    pub(crate) channel: u8,
+    pub(crate) data_rate: DataRate,
+    pub(crate) pa_level: PALevel,
+    pub(crate) crc_encoding_scheme: Option<EncodingScheme>,
+    pub(crate) payload_size: PayloadSize,
+    pub(crate) retry_setup: AutoRetransmission,
+}
+
+impl core::fmt::Debug for DebugInfo {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Nrf24l01")
+            .field("channel", &self.channel)
+            .field("frequency", &(self.channel as u16 + 2400))
+            .field("data_rate", &self.data_rate)
+            .field("pa_level", &self.pa_level)
+            .field("crc_encoding_scheme", &self.crc_encoding_scheme)
+            .field("payload_size", &self.payload_size)
+            .field("retry_setup", &self.retry_setup)
+            .finish()
     }
 }

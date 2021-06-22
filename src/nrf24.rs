@@ -609,6 +609,16 @@ where
         self.write_register(Register::CONFIG, (1 << 3) | (scheme.scheme() << 2))
     }
 
+    pub fn crc_encoding_scheme(
+        &mut self,
+    ) -> Result<Option<EncodingScheme>, TransferError<SPIErr, PinErr>> {
+        let config_reg = self.read_register(Register::CONFIG)?;
+        if config_reg & (1 << 3) == 1 << 3 {
+            return Ok(Some(EncodingScheme::from(config_reg)));
+        }
+        Ok(None)
+    }
+
     /// Sets the payload size in bytes.
     /// This can either be static with a set size, or dynamic.
     ///
@@ -761,10 +771,34 @@ where
     /// Clears the interrupt request flags, so new ones can come in.
     pub fn interrupt_src(&mut self) -> Result<Interrupts, TransferError<SPIErr, PinErr>> {
         let status = self.status()?;
-        let _ = status.reached_max_retries();
         // Clear flags
         self.write_register(Register::STATUS, Interrupts::all().value())?;
         Ok(Interrupts::from(status.value()))
+    }
+
+    /// Returns a debug struct for printing information regarding current setup
+    ///
+    /// # Example
+    /// ```rust
+    /// ```
+    pub fn debug_view(
+        &mut self,
+    ) -> Result<crate::config::DebugInfo, TransferError<SPIErr, PinErr>> {
+        let channel = self.channel()?;
+        let data_rate = self.data_rate()?;
+        let pa_level = self.power_amp_level()?;
+        // doesn't read actual payload TODO: fix
+        let payload_size = self.payload_size();
+        let crc_encoding_scheme = self.crc_encoding_scheme()?;
+        let retry_setup = self.retries()?;
+        Ok(crate::config::DebugInfo {
+            channel,
+            data_rate,
+            pa_level,
+            crc_encoding_scheme,
+            payload_size,
+            retry_setup,
+        })
     }
 
     /// Sends an instruction over the SPI bus without extra data.

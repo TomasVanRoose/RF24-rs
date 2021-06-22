@@ -24,7 +24,7 @@ impl<SPIError, PinError> uDebug for TransferError<SPIError, PinError> {
             Self::Spi(_) => f.write_str("SPI error"),
             Self::Pin(_) => f.write_str("Pin error"),
             Self::CommunicationError(_) => f.write_str("Communication error"),
-            Self::MaximumRetries => f.write_str("SPI error"),
+            Self::MaximumRetries => f.write_str("Maximum retries reached"),
         }
     }
 }
