@@ -1,7 +1,7 @@
 //! nRF24 implementations.
 
 use crate::config::{
-    AddressWidth, AutoRetransmission, DataPipe, DataRate, EncodingScheme, NrfConfig, PALevel,
+    AddressWidth, AutoRetransmission, DataPipe, DataRate, EncodingScheme, Mode, NrfConfig, PALevel,
     PayloadSize,
 };
 use crate::error::TransferError;
@@ -791,6 +791,14 @@ where
         let payload_size = self.payload_size();
         let crc_encoding_scheme = self.crc_encoding_scheme()?;
         let retry_setup = self.retries()?;
+
+        let config_reg = self.read_register(Register::CONFIG)?;
+        let mode = if config_reg & 1 == 0 {
+            Mode::TransmissionMode
+        } else {
+            Mode::ReceiverMode
+        };
+
         Ok(crate::config::DebugInfo {
             channel,
             data_rate,
@@ -798,6 +806,7 @@ where
             crc_encoding_scheme,
             payload_size,
             retry_setup,
+            mode,
         })
     }
 

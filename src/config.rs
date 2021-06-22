@@ -579,6 +579,12 @@ impl uDebug for DataPipe {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+pub(crate) enum Mode {
+    TransmissionMode,
+    ReceiverMode,
+}
+
 #[derive(Copy, Clone)]
 pub struct DebugInfo {
     pub(crate) channel: u8,
@@ -587,6 +593,7 @@ pub struct DebugInfo {
     pub(crate) crc_encoding_scheme: Option<EncodingScheme>,
     pub(crate) payload_size: PayloadSize,
     pub(crate) retry_setup: AutoRetransmission,
+    pub(crate) mode: Mode,
 }
 
 impl core::fmt::Debug for DebugInfo {
@@ -599,6 +606,7 @@ impl core::fmt::Debug for DebugInfo {
             .field("crc_encoding_scheme", &self.crc_encoding_scheme)
             .field("payload_size", &self.payload_size)
             .field("retry_setup", &self.retry_setup)
+            .field("mode", &self.mode)
             .finish()
     }
 }
