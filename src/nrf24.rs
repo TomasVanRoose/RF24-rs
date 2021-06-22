@@ -802,6 +802,7 @@ where
         let addr_width = AddressWidth::from_register(self.read_register(Register::SETUP_AW)?);
 
         let tx_addr = self.read_tx()?;
+        let auto_ack = self.read_register(Register::EN_AA)?;
 
         Ok(crate::config::DebugInfo {
             channel,
@@ -813,6 +814,7 @@ where
             mode,
             addr_width,
             tx_addr,
+            auto_ack,
         })
     }
 
