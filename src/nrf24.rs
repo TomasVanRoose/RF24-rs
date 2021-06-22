@@ -802,6 +802,7 @@ where
         let addr_width = AddressWidth::from_register(self.read_register(Register::SETUP_AW)?);
 
         let tx_addr = self.read_tx()?;
+        let rx1_addr = self.read_rx()?;
         let auto_ack = self.read_register(Register::EN_AA)?;
         let open_read_pipes = self.read_register(Register::EN_RXADDR)?;
 
@@ -817,6 +818,7 @@ where
             tx_addr,
             auto_ack,
             open_read_pipes,
+            rx1_addr,
         })
     }
 
@@ -887,6 +889,20 @@ where
 
     fn read_tx(&mut self) -> Result<[u8; 5], TransferError<SPIErr, PinErr>> {
         self.tx_buf[0] = Instruction::RR.opcode() | Register::TX_ADDR.addr();
+        self.tx_buf[1..=Self::MAX_ADDR_WIDTH].copy_from_slice(&[0; 5]);
+        // Write to spi
+        self.set_ncs_low()?;
+        let r = self.spi_transfer_tx_buf(Self::MAX_ADDR_WIDTH)?;
+        // Transfer the data read to buf.
+        // Skip first byte because it contains the command.
+        // Make both slices are the same length, otherwise `copy_from_slice` panics.
+        let mut buf = [0; 5];
+        buf.copy_from_slice(&r[1..=5]);
+        self.set_ncs_high()?;
+        Ok(buf)
+    }
+    fn read_rx(&mut self) -> Result<[u8; 5], TransferError<SPIErr, PinErr>> {
+        self.tx_buf[0] = Instruction::RR.opcode() | Register::RX_PW_P1.addr();
         self.tx_buf[1..=Self::MAX_ADDR_WIDTH].copy_from_slice(&[0; 5]);
         // Write to spi
         self.set_ncs_low()?;

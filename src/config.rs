@@ -615,6 +615,7 @@ pub struct DebugInfo {
     pub(crate) mode: Mode,
     pub(crate) addr_width: AddressWidth,
     pub(crate) tx_addr: [u8; 5],
+    pub(crate) rx1_addr: [u8; 5],
     pub(crate) auto_ack: u8,
     pub(crate) open_read_pipes: u8,
 }
@@ -632,6 +633,7 @@ impl core::fmt::Debug for DebugInfo {
             .field("mode", &self.mode)
             .field("address_width", &self.addr_width)
             .field("tx_address", &core::str::from_utf8(&self.tx_addr).unwrap())
+            .field("rx1_address", &format_args!("{:x?}", &self.rx1_addr))
             .field("auto_ack_channels", &format_args!("{:06b}", self.auto_ack))
             .field(
                 "enabled_rx_addresses",
