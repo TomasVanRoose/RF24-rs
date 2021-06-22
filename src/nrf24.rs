@@ -803,6 +803,7 @@ where
 
         let tx_addr = self.read_tx()?;
         let auto_ack = self.read_register(Register::EN_AA)?;
+        let open_read_pipes = self.read_register(Register::EN_RXADDR)?;
 
         Ok(crate::config::DebugInfo {
             channel,
@@ -815,6 +816,7 @@ where
             addr_width,
             tx_addr,
             auto_ack,
+            open_read_pipes,
         })
     }
 
