@@ -799,6 +799,10 @@ where
             Mode::ReceiverMode
         };
 
+        let addr_width = AddressWidth::from_register(self.read_register(Register::SETUP_AW)?);
+
+        let tx_addr = self.read_tx()?;
+
         Ok(crate::config::DebugInfo {
             channel,
             data_rate,
@@ -807,6 +811,8 @@ where
             payload_size,
             retry_setup,
             mode,
+            addr_width,
+            tx_addr,
         })
     }
 
@@ -873,6 +879,21 @@ where
         let reg = self.spi_transfer_tx_buf(2)?[1];
         self.set_ncs_high()?;
         Ok(reg)
+    }
+
+    fn read_tx(&mut self) -> Result<[u8; 5], TransferError<SPIErr, PinErr>> {
+        self.tx_buf[0] = Instruction::RR.opcode() | Register::TX_ADDR.addr();
+        self.tx_buf[1..=Self::MAX_ADDR_WIDTH].copy_from_slice(&[0; 5]);
+        // Write to spi
+        self.set_ncs_low()?;
+        let r = self.spi_transfer_tx_buf(Self::MAX_ADDR_WIDTH)?;
+        // Transfer the data read to buf.
+        // Skip first byte because it contains the command.
+        // Make both slices are the same length, otherwise `copy_from_slice` panics.
+        let mut buf = [0; 5];
+        buf.copy_from_slice(&r[1..=5]);
+        self.set_ncs_high()?;
+        Ok(buf)
     }
 
     fn setup_rf(

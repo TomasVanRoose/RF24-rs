@@ -357,7 +357,7 @@ impl uDebug for EncodingScheme {
 }
 
 /// Address width for the reading and writing pipes.
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(PartialEq, Eq, Copy, Clone)]
 pub enum AddressWidth {
     /// 3 bytes
     R3Bytes = 1,
@@ -371,6 +371,14 @@ impl AddressWidth {
     pub(crate) fn value(&self) -> u8 {
         *self as u8
     }
+    pub(crate) fn from_register(t: u8) -> Self {
+        match t & 0b11 {
+            0b01 => Self::R3Bytes,
+            0b10 => Self::R4Bytes,
+            0b11 => Self::R5Bytes,
+            _ => unreachable!(),
+        }
+    }
 }
 impl Default for AddressWidth {
     fn default() -> Self {
@@ -379,11 +387,22 @@ impl Default for AddressWidth {
 }
 
 impl From<u8> for AddressWidth {
+    // from literal value
     fn from(t: u8) -> Self {
         match t {
             0..=3 => Self::R3Bytes,
             4 => Self::R4Bytes,
             5..=u8::MAX => Self::R5Bytes,
+        }
+    }
+}
+
+impl core::fmt::Debug for AddressWidth {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match *self {
+            Self::R3Bytes => f.write_str("3 bytes"),
+            Self::R4Bytes => f.write_str("4 bytes"),
+            Self::R5Bytes => f.write_str("5 bytes"),
         }
     }
 }
@@ -594,6 +613,8 @@ pub struct DebugInfo {
     pub(crate) payload_size: PayloadSize,
     pub(crate) retry_setup: AutoRetransmission,
     pub(crate) mode: Mode,
+    pub(crate) addr_width: AddressWidth,
+    pub(crate) tx_addr: [u8; 5],
 }
 
 impl core::fmt::Debug for DebugInfo {
@@ -607,6 +628,8 @@ impl core::fmt::Debug for DebugInfo {
             .field("payload_size", &self.payload_size)
             .field("retry_setup", &self.retry_setup)
             .field("mode", &self.mode)
+            .field("address_width", &self.addr_width)
+            .field("tx_address", &core::str::from_utf8(&self.tx_addr).unwrap())
             .finish()
     }
 }
