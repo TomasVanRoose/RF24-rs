@@ -27,6 +27,7 @@ pub(crate) enum Register {
     FIFO_STATUS = 0x17,
     DYNPD = 0x1c,
     FEATURE = 0x1d,
+    R_RX_PL_WID = 0x60,
 }
 
 impl Register {

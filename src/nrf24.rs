@@ -361,7 +361,9 @@ where
         let len = if let PayloadSize::Static(n) = self.payload_size {
             n as usize
         } else {
-            core::cmp::min(buf.len(), MAX_PAYLOAD_SIZE as usize)
+            // read dynamic payload size
+            let pl = self.read_register(Register::R_RX_PL_WID)?;
+            core::cmp::min(core::cmp::min(buf.len(), pl as usize), MAX_PAYLOAD_SIZE as usize)
         };
 
         // Use tx buffer to copy the values into
@@ -661,7 +663,7 @@ where
             }
             PayloadSize::Dynamic => {
                 let feature = self.read_register(Register::FEATURE)?;
-                self.write_register(Register::CONFIG, feature | (1 << 2))?;
+                self.write_register(Register::FEATURE, feature | (1 << 2))?;
                 self.write_register(Register::DYNPD, 0b0001_1111)?; // enable on all pipes
             }
         }

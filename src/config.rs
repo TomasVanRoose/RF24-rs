@@ -267,18 +267,26 @@ impl uDebug for PayloadSize {
 
 /// Configured speed at which data will be sent.
 ///
+/// Encoding:
+/// [RF_DR_LOW (bit 5), RF_DR_HIGH (bit 3)]:
+/// ‘00’ – 1Mbps
+/// ‘01’ – 2Mbps
+/// ‘10’ – 250kbps
+///
 /// Defaults to 2Mpbs.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum DataRate {
     /// 1 Mbps
-    R1Mbps = 0b0000_0000,
+    R1Mbps   = 0b0000_0000,
     /// 2 Mbps
-    R2Mbps = 0b0000_0001,
+    R2Mbps   = 0b0000_1000,
+    /// 250 Kpbs
+    R250Kbps = 0b0010_0000,
 }
 
 impl DataRate {
     pub(crate) fn bitmask() -> u8 {
-        0b0000_1000
+        0b0010_1000
     }
     pub(crate) fn rate(&self) -> u8 {
         *self as u8
@@ -296,6 +304,7 @@ impl From<u8> for DataRate {
         match t & Self::bitmask() {
             0b0000_0000 => Self::R1Mbps,
             0b0000_1000 => Self::R2Mbps,
+            0b0010_0000 => Self::R250Kbps,
             _ => unreachable!(),
         }
     }
@@ -308,6 +317,7 @@ impl uDebug for DataRate {
         W: uWrite,
     {
         match *self {
+            DataRate::R250Kbps => f.write_str("250 Kbps"),
             DataRate::R1Mbps => f.write_str("1 Mbps"),
             DataRate::R2Mbps => f.write_str("2 Mbps"),
         }
