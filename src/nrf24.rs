@@ -902,7 +902,7 @@ where
         Ok(buf)
     }
     fn read_rx(&mut self) -> Result<[u8; 5], TransferError<SPIErr, PinErr>> {
-        self.tx_buf[0] = Instruction::RR.opcode() | Register::RX_PW_P1.addr();
+        self.tx_buf[0] = Instruction::RR.opcode() | Register::RX_ADDR_P1.addr();
         self.tx_buf[1..=Self::MAX_ADDR_WIDTH].copy_from_slice(&[0; 5]);
         // Write to spi
         self.set_ncs_low()?;
