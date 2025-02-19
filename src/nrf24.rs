@@ -51,7 +51,6 @@ where
     CE: OutputPin,
 {
     const MAX_ADDR_WIDTH: usize = 5;
-    const CORRECT_CONFIG: u8 = 0b00001110;
     const STATUS_RESET: u8 = 0b01110000;
 
     /// Creates a new nrf24l01 driver with given config.
@@ -126,16 +125,18 @@ where
         chip.flush_rx()?;
         chip.flush_tx()?;
 
-        // clear CONFIG register, Enable PTX, Power Up & 16-bit CRC
-        if let Some(encoding_scheme) = config.crc_encoding_scheme {
-            chip.enable_crc(encoding_scheme)?;
-        }
+        // The value the config register should be: power up bit + crc encoding
+        let config_val = (1 << 1) | config.crc_encoding_scheme.scheme();
+
+        // clear CONFIG register, Enable PTX, Power Up & set CRC
+        chip.write_register(Register::CONFIG, config_val)?;
+
+        // wait for startup
+        delay.delay_ms(5);
 
         chip.config_reg = chip.read_register(Register::CONFIG)?;
 
-        chip.power_up(delay)?;
-
-        if chip.config_reg != Self::CORRECT_CONFIG {
+        if chip.config_reg != config_val {
             Err(TransceiverError::Comm(chip.config_reg))
         } else {
             Ok(chip)
@@ -232,7 +233,7 @@ where
     // TODO: Use the type system to make start and stop listening by RAII and Drop
     pub fn start_listening(&mut self) -> NrfResult<(), SPI, CE> {
         // Enable RX listening flag
-        self.config_reg |= 1;
+        self.config_reg |= 0b1;
         self.write_register(Register::CONFIG, self.config_reg)?;
         // Flush interrupts
         self.reset_status()?;
@@ -414,7 +415,7 @@ where
 
         // Add instruction to buffer
         self.tx_buf[0] = Instruction::WTX.opcode();
-        // Write to spi
+        // Write to TX FIFO
         let r = self.spi_transfer_tx_buf(send_count)?;
         let status = Status::from(r[0]);
 
@@ -575,22 +576,30 @@ where
 
     /// Enable CRC encoding scheme.
     ///
-    /// **Note** that this configures the nrf24l01 in transmit mode.
-    ///
     /// # Examples
     /// ```rust
     /// chip.enable_crc(EncodingScheme::R2Bytes)?;
     /// ```
     pub fn enable_crc(&mut self, scheme: EncodingScheme) -> NrfResult<(), SPI, CE> {
-        self.write_register(Register::CONFIG, (1 << 3) | (scheme.scheme() << 2))
+        // Set the crc encoding bits to 0 first
+        self.config_reg &= !EncodingScheme::bitmask();
+        // Now set the right bits
+        self.config_reg |= scheme.scheme();
+        self.write_register(Register::CONFIG, self.config_reg)
     }
 
-    pub fn crc_encoding_scheme(&mut self) -> NrfResult<Option<EncodingScheme>, SPI, CE> {
-        let config_reg = self.read_register(Register::CONFIG)?;
-        if config_reg & (1 << 3) == 1 << 3 {
-            return Ok(Some(EncodingScheme::from(config_reg)));
-        }
-        Ok(None)
+    /// Get the CRC encoding scheme
+    ///
+    /// # Examples
+    /// ```rust
+    /// match chip.crc_encoding_scheme()? {
+    ///     EncodingScheme::NoRedundancyCheck => println("No crc check"),
+    ///     EncodingScheme::R1Byte => println("8 bit check"),
+    ///     EncodingScheme::R2Bytes => println("16 bit check"),
+    /// };
+    /// ```
+    pub fn crc_encoding_scheme(&mut self) -> NrfResult<EncodingScheme, SPI, CE> {
+        self.read_register(Register::CONFIG).map(From::from)
     }
 
     /// Sets the payload size in bytes.
@@ -623,7 +632,7 @@ where
                     // currently dynamic payload enabled
                     // Disable dynamic payloads
                     let feature = self.read_register(Register::FEATURE)?;
-                    self.write_register(Register::CONFIG, feature & !(1 << 2))?;
+                    self.write_register(Register::FEATURE, feature & !(1 << 2))?;
                 }
 
                 self.write_register(Register::RX_PW_P0, payload_size)?;
@@ -709,7 +718,7 @@ where
     /// Resets the following flags in the status register:
     /// - data ready RX fifo interrupt
     /// - data sent TX fifo interrupt
-    /// - maximum number of number of retries interrupt
+    /// - maximum number of retries interrupt
     pub fn reset_status(&mut self) -> NrfResult<(), SPI, CE> {
         self.write_register(Register::STATUS, Self::STATUS_RESET)
     }

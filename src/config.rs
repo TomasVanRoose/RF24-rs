@@ -45,7 +45,7 @@ const MAX_CHANNEL: u8 = 125;
 ///     .addr_width(3),
 ///     .data_rate(DataRate::R2Mbps)
 ///     .pa_level(PALevel::Max)
-///     .crc_encoding_scheme(None) // disable crc
+///     .crc_encoding_scheme(EncodingScheme::NoRedundancyCheck) // disable crc
 ///     .ack_payloads_enabled(true)
 ///     .auto_retry((15, 15));
 ///
@@ -58,7 +58,7 @@ pub struct NrfConfig {
     pub(crate) addr_width: AddressWidth,
     pub(crate) data_rate: DataRate,
     pub(crate) pa_level: PALevel,
-    pub(crate) crc_encoding_scheme: Option<EncodingScheme>,
+    pub(crate) crc_encoding_scheme: EncodingScheme,
     pub(crate) ack_payloads_enabled: bool,
     pub(crate) auto_retry: AutoRetransmission,
 }
@@ -93,9 +93,8 @@ impl NrfConfig {
         self.pa_level = pa_level;
         self
     }
-    /// Set the Cyclic Redundancy Check Encodign Scheme
-    /// None will disable the CRC.
-    pub fn crc_encoding_scheme(mut self, crc_encoding_scheme: Option<EncodingScheme>) -> Self {
+    /// Set the Cyclic Redundancy Check Encoding Scheme
+    pub fn crc_encoding_scheme(mut self, crc_encoding_scheme: EncodingScheme) -> Self {
         self.crc_encoding_scheme = crc_encoding_scheme;
         self
     }
@@ -117,7 +116,7 @@ impl Default for NrfConfig {
             channel: 76,
             payload_size: PayloadSize::default(),
             addr_width: AddressWidth::default(),
-            crc_encoding_scheme: Some(EncodingScheme::R2Bytes),
+            crc_encoding_scheme: EncodingScheme::R2Bytes,
             pa_level: PALevel::default(),
             data_rate: DataRate::default(),
             ack_payloads_enabled: false,
@@ -323,15 +322,17 @@ impl uDebug for DataRate {
 /// Cyclic Redundancy Check encoding scheme.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum EncodingScheme {
+    /// No CRC check
+    NoRedundancyCheck = 0b0000_0000,
     /// 1 byte
-    R1Byte = 0,
+    R1Byte = 0b0000_1000,
     /// 2 bytes
-    R2Bytes = 1,
+    R2Bytes = 0b0000_1100,
 }
 
 impl EncodingScheme {
-    fn bitmask() -> u8 {
-        0b0000_0100
+    pub(crate) fn bitmask() -> u8 {
+        0b0000_1100
     }
 
     pub(crate) fn scheme(&self) -> u8 {
@@ -342,8 +343,9 @@ impl EncodingScheme {
 impl From<u8> for EncodingScheme {
     fn from(t: u8) -> Self {
         match t & Self::bitmask() {
-            0b0000_0000 => Self::R1Byte,
-            0b0000_0100 => Self::R2Bytes,
+            0b0000_0000 => Self::NoRedundancyCheck,
+            0b0000_1000 => Self::R1Byte,
+            0b0000_1100 => Self::R2Bytes,
             _ => unreachable!(),
         }
     }
@@ -623,7 +625,7 @@ pub struct DebugInfo {
     pub(crate) channel: u8,
     pub(crate) data_rate: DataRate,
     pub(crate) pa_level: PALevel,
-    pub(crate) crc_encoding_scheme: Option<EncodingScheme>,
+    pub(crate) crc_encoding_scheme: EncodingScheme,
     pub(crate) payload_size: PayloadSize,
     pub(crate) retry_setup: AutoRetransmission,
     pub(crate) mode: Mode,
