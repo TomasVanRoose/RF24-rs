@@ -169,7 +169,7 @@ mod nrf24;
 mod register_acces;
 pub mod status;
 
-pub use crate::error::TransferError;
+pub use crate::error::TransceiverError;
 pub use crate::nrf24::Nrf24l01;
 
 /// SPI mode. Use this when initializing the SPI instance.

@@ -1,6 +1,6 @@
 [package]
 name = "nrf24-rs"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["Tomas Van Roose <tomas.vanroose@gmail.com>"]
 repository = "https://github.com/TomasVanRoose/RF24-rs"
 license = "MIT OR Apache-2.0"
@@ -11,17 +11,12 @@ categories = ["embedded", "hardware-support", "no-std"]
 
 homepage = "https://github.com/TomasVanRoose/RF24-rs"
 readme = "README.md"
-edition = "2018"
-rust = "1.50.0"
+edition = "2021"
+rust = "1.81.0"
 
 exclude = [
     "examples/",
 ]
 
-[features]
-micro-fmt = ["ufmt"]
-
 [dependencies]
-embedded-hal = "0.2"
-# Feature dependencies
-ufmt = { version = "0.1", optional = true }
+embedded-hal = "1.0.0"

@@ -16,8 +16,6 @@
 //!
 use crate::register_acces::Register;
 use crate::MAX_PAYLOAD_SIZE;
-#[cfg(feature = "micro-fmt")]
-use ufmt::{uDebug, uWrite, uwrite, Formatter};
 
 const MAX_CHANNEL: u8 = 125;
 
@@ -128,6 +126,7 @@ impl Default for NrfConfig {
     }
 }
 
+/*
 #[cfg(feature = "micro-fmt")]
 impl uDebug for NrfConfig {
     fn fmt<W: ?Sized>(&self, f: &mut Formatter<'_, W>) -> core::result::Result<(), W::Error>
@@ -149,6 +148,7 @@ impl uDebug for NrfConfig {
             .finish()
     }
 }
+*/
 
 /// Different RF power levels. The higher the level the bigger range, but the more the current
 /// consumption.
@@ -203,6 +203,7 @@ impl core::fmt::Debug for PALevel {
     }
 }
 
+/*
 #[cfg(feature = "micro-fmt")]
 impl uDebug for PALevel {
     fn fmt<W: ?Sized>(&self, f: &mut Formatter<'_, W>) -> core::result::Result<(), W::Error>
@@ -217,6 +218,7 @@ impl uDebug for PALevel {
         }
     }
 }
+*/
 
 /// Enum representing the payload size.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -252,6 +254,7 @@ impl From<u8> for PayloadSize {
     }
 }
 
+/*
 #[cfg(feature = "micro-fmt")]
 impl uDebug for PayloadSize {
     fn fmt<W: ?Sized>(&self, f: &mut Formatter<'_, W>) -> core::result::Result<(), W::Error>
@@ -264,6 +267,7 @@ impl uDebug for PayloadSize {
         }
     }
 }
+*/
 
 /// Configured speed at which data will be sent.
 ///
@@ -301,6 +305,7 @@ impl From<u8> for DataRate {
     }
 }
 
+/*
 #[cfg(feature = "micro-fmt")]
 impl uDebug for DataRate {
     fn fmt<W: ?Sized>(&self, f: &mut Formatter<'_, W>) -> core::result::Result<(), W::Error>
@@ -313,6 +318,7 @@ impl uDebug for DataRate {
         }
     }
 }
+*/
 
 /// Cyclic Redundancy Check encoding scheme.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -343,6 +349,7 @@ impl From<u8> for EncodingScheme {
     }
 }
 
+/*
 #[cfg(feature = "micro-fmt")]
 impl uDebug for EncodingScheme {
     fn fmt<W: ?Sized>(&self, f: &mut Formatter<'_, W>) -> core::result::Result<(), W::Error>
@@ -355,6 +362,7 @@ impl uDebug for EncodingScheme {
         }
     }
 }
+*/
 
 /// Address width for the reading and writing pipes.
 #[derive(PartialEq, Eq, Copy, Clone)]
@@ -407,6 +415,7 @@ impl core::fmt::Debug for AddressWidth {
     }
 }
 
+/*
 #[cfg(feature = "micro-fmt")]
 impl uDebug for AddressWidth {
     fn fmt<W: ?Sized>(&self, f: &mut Formatter<'_, W>) -> core::result::Result<(), W::Error>
@@ -420,6 +429,7 @@ impl uDebug for AddressWidth {
         }
     }
 }
+*/
 
 /// Configuration of automatic retransmission consisting of a retransmit delay
 /// and a retransmission count.
@@ -491,6 +501,7 @@ impl core::fmt::Debug for AutoRetransmission {
     }
 }
 
+/*
 #[cfg(feature = "micro-fmt")]
 impl uDebug for AutoRetransmission {
     fn fmt<W: ?Sized>(&self, f: &mut Formatter<'_, W>) -> core::result::Result<(), W::Error>
@@ -504,6 +515,7 @@ impl uDebug for AutoRetransmission {
             .finish()
     }
 }
+*/
 /// Representation of the different data pipes through which data can be received.
 ///
 /// An nRF24L01 configured as primary RX (PRX) will be able to receive data trough 6 different data
@@ -581,6 +593,7 @@ impl Into<Register> for DataPipe {
     }
 }
 
+/*
 #[cfg(feature = "micro-fmt")]
 impl uDebug for DataPipe {
     fn fmt<W: ?Sized>(&self, f: &mut Formatter<'_, W>) -> core::result::Result<(), W::Error>
@@ -597,6 +610,7 @@ impl uDebug for DataPipe {
         }
     }
 }
+*/
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum Mode {

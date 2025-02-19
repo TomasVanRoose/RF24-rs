@@ -1,7 +1,5 @@
 //! Status datastructures.
 use crate::config::DataPipe;
-#[cfg(feature = "micro-fmt")]
-use ufmt::{uDebug, uWrite, Formatter};
 
 /// Wrapper for the status value returned from the device.
 /// Provides convenience methods and debug implemantions.
@@ -153,6 +151,7 @@ impl core::fmt::Debug for Status {
     }
 }
 
+/*
 #[cfg(feature = "micro-fmt")]
 impl uDebug for Status {
     fn fmt<W: ?Sized>(&self, f: &mut Formatter<'_, W>) -> core::result::Result<(), W::Error>
@@ -175,3 +174,4 @@ impl uDebug for Status {
         }
     }
 }
+*/

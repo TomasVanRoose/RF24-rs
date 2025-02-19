@@ -1,30 +1,31 @@
-#[cfg(feature = "micro-fmt")]
-use ufmt::{uDebug, uWrite, Formatter};
+//! Errors that can occur when sending and receiving data.
+use core::error::Error;
+use core::fmt;
 
-/// Errors that can occur when sending and receiving data.
 #[derive(Copy, Clone, Debug)]
-pub enum TransferError<SPIError, PinError> {
+pub enum TransceiverError<SpiErr, CeErr> {
     /// SPI communication error
-    Spi(SPIError),
-    /// Pin set error
-    Pin(PinError),
+    Spi(SpiErr),
+    /// Chip enable error
+    Ce(CeErr),
     /// Communication error with module
-    CommunicationError(u8),
+    Comm(u8),
     /// Max retries reached
-    MaximumRetries,
+    MaxRetries,
 }
 
-#[cfg(feature = "micro-fmt")]
-impl<SPIError, PinError> uDebug for TransferError<SPIError, PinError> {
-    fn fmt<W: ?Sized>(&self, f: &mut Formatter<'_, W>) -> core::result::Result<(), W::Error>
-    where
-        W: uWrite,
-    {
-        match *self {
-            Self::Spi(_) => f.write_str("SPI error"),
-            Self::Pin(_) => f.write_str("Pin error"),
-            Self::CommunicationError(_) => f.write_str("Communication error"),
-            Self::MaximumRetries => f.write_str("Maximum retries reached"),
+impl<SpiErr: fmt::Display, CeErr: fmt::Display> fmt::Display for TransceiverError<SpiErr, CeErr> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TransceiverError::Spi(e) => write!(f, "SPI error: {}", e),
+            TransceiverError::Ce(e) => write!(f, "Chip enable error: {}", e),
+            TransceiverError::Comm(_) => write!(f, "Communication error"),
+            TransceiverError::MaxRetries => write!(f, "Max retries error"),
         }
     }
+}
+
+impl<SpiErr: fmt::Debug + fmt::Display, CeErr: fmt::Debug + fmt::Display> Error
+    for TransceiverError<SpiErr, CeErr>
+{
 }
