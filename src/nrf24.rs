@@ -843,7 +843,7 @@ where
 
     fn read_register(&mut self, register: Register) -> NrfResult<u8, SPI, CE> {
         self.tx_buf[..2].copy_from_slice(&[Instruction::RR.opcode() | register.addr(), 0]);
-        let reg = self.spi_transfer_tx_buf(2)?[1];
+        let reg = self.spi_transfer_tx_buf(1)?[1];
         Ok(reg)
     }
 
