@@ -4,7 +4,7 @@ use hal::digital::ErrorType as PinErrorType;
 use hal::spi::ErrorType as SpiErrorType;
 
 use crate::config::{
-    AddressWidth, AutoRetransmission, DataPipe, DataRate, EncodingScheme, Mode, NrfConfig, PALevel,
+    AddressWidth, AutoRetransmission, DataPipe, DataRate, EncodingScheme, NrfConfig, PALevel,
     PayloadSize,
 };
 use crate::error::TransceiverError;
@@ -151,12 +151,8 @@ where
     /// }
     /// ```
     pub fn is_connected(&mut self) -> NrfResult<bool, SPI, CE> {
-        let setup = self.read_register(Register::SETUP_AW)?;
-        if (1..=3).contains(&setup) {
-            Ok(true)
-        } else {
-            Ok(false)
-        }
+        self.read_register(Register::SETUP_AW)
+            .map(|aw| aw == 0b1 || aw == 0b10 || aw == 0b11)
     }
 
     /// Opens a reading pipe for reading data on an address.
@@ -644,7 +640,7 @@ where
             }
             PayloadSize::Dynamic => {
                 let feature = self.read_register(Register::FEATURE)?;
-                self.write_register(Register::CONFIG, feature | (1 << 2))?;
+                self.write_register(Register::FEATURE, feature | (1 << 2))?;
                 self.write_register(Register::DYNPD, 0b0001_1111)?; // enable on all pipes
             }
         }
@@ -756,6 +752,26 @@ where
         Ok(Interrupts::from(status.value()))
     }
 
+    /// Reads the config from the device and returns it in a `NrfConfig` struct.
+    /// Can be used to log the configuration when using `defmt` feature.
+    ///
+    /// # Example
+    /// ```rust
+    /// ```
+    pub fn read_config(&mut self) -> NrfResult<NrfConfig, SPI, CE> {
+        let addr_width = AddressWidth::from_register(self.read_register(Register::SETUP_AW)?);
+        let config = NrfConfig::default()
+            .payload_size(self.payload_size)
+            .channel(self.channel()?)
+            .addr_width(addr_width)
+            .data_rate(self.data_rate()?)
+            .pa_level(self.power_amp_level()?)
+            .crc_encoding_scheme(self.crc_encoding_scheme()?)
+            .auto_retry(self.retries()?);
+        Ok(config)
+    }
+
+    /*
     /// Returns a debug struct for printing information regarding current setup
     ///
     /// # Example
@@ -799,6 +815,7 @@ where
             rx1_addr,
         })
     }
+    */
 
     /// Sends an instruction over the SPI bus without extra data.
     ///

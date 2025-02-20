@@ -155,7 +155,6 @@
 #![warn(
     missing_docs,
     missing_copy_implementations,
-    missing_debug_implementations,
     trivial_casts,
     trivial_numeric_casts
 )]

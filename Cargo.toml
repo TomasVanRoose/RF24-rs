@@ -19,4 +19,8 @@ exclude = [
 ]
 
 [dependencies]
+defmt = { version = "0.3.10", optional = true }
 embedded-hal = "1.0.0"
+
+[features]
+defmt = ["dep:defmt"]
