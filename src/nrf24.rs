@@ -1,20 +1,18 @@
 //! nRF24 implementations.
 
-use hal::digital::ErrorType as PinErrorType;
-use hal::spi::ErrorType as SpiErrorType;
-
 use crate::config::{
     AddressWidth, AutoRetransmission, DataPipe, DataRate, EncodingScheme, NrfConfig, PALevel,
     PayloadSize,
 };
 use crate::error::TransceiverError;
-use crate::hal::delay::DelayNs;
-use crate::hal::digital::OutputPin;
-use crate::hal::spi::SpiDevice;
 use crate::register_acces::{Instruction, Register};
 use crate::status::{Interrupts, Status};
 use crate::MAX_PAYLOAD_SIZE;
-use core::fmt;
+use embedded_hal::{
+    delay::DelayNs,
+    digital::{ErrorType as PinErrorType, OutputPin},
+    spi::{ErrorType as SpiErrorType, Operation, SpiDevice},
+};
 
 /// The nRF24L01 driver type. This struct encapsulates all functionality.
 ///
@@ -26,7 +24,7 @@ use core::fmt;
 /// use nrf24::config::NrfConfig;
 ///
 /// // Initialize the chip with deafault configuration.
-/// let nrf24 = Nrf24l01::new(spi, ce, ncs, &mut delay, NrfConfig::default()).unwrap();
+/// let nrf24 = Nrf24l01::new(spi, ce, &mut delay, NrfConfig::default()).unwrap();
 ///
 /// ```
 pub struct Nrf24l01<SPI, CE> {
@@ -37,8 +35,6 @@ pub struct Nrf24l01<SPI, CE> {
     config_reg: u8,
     // Payload size
     payload_size: PayloadSize,
-    // Transmission buffer
-    tx_buf: [u8; MAX_PAYLOAD_SIZE as usize + 1],
 }
 
 // Associated type alias to simplify our result types.
@@ -53,38 +49,61 @@ where
     const MAX_ADDR_WIDTH: usize = 5;
     const STATUS_RESET: u8 = 0b01110000;
 
-    /// Creates a new nrf24l01 driver with given config.
-    /// Starts up the device after initialization, so calling [`power_up()`](#method.power_up) is not necessary.
+    /// Creates a new nRF24L01 driver with the given configuration.
+    ///
+    /// This function initializes the device, configures it according to the provided settings,
+    /// and performs validation to ensure proper communication with the chip. After initialization,
+    /// the device is powered up and ready to use.
+    ///
+    /// # Arguments
+    ///
+    /// * `spi` - SPI interface for communicating with the nRF24L01 chip, this type should implement
+    ///           the `SpiDevice` trait from `embedded_hal`
+    /// * `ce` - Chip Enable pin for controlling the chip's operating states
+    /// * `delay` - Delay provider for timing requirements during initialization
+    /// * `config` - Configuration settings for the chip (see [`NrfConfig`] for options)
+    ///
+    /// # Errors
+    ///
+    /// This function may return errors in the following situations:
+    /// * SPI communication errors
+    /// * Chip enable pin errors
+    /// * Communication errors with the module (e.g., incorrect configuration register values)
     ///
     /// # Examples
-    /// ```
-    /// // Initialize all pins required
-    /// let dp = Peripherals::take()::unwrap();
-    /// let mut portd = dp.PORTD.split();
-    /// let ce = portd.pd3.into_output(&mut portd.ddr); // Chip Enable
-    ///
-    /// let mut portb = dp.PORTB.split();
-    /// let ncs = portb.pb2.into_output(&mut portb.ddr); // Chip Select (active low)
-    /// let mosi = portb.pb3.into_output(&mut portb.ddr); // Master Out Slave In Pin
-    /// let miso = portb.pb4.into_pull_up_input(&mut portb.ddr); // Master In Slave Out Pin
-    /// let sclk = portb.pb5.into_output(&mut portb.ddr); // Clock
-    ///
-    /// // Now we initialize SPI settings to create an SPI instance
-    /// let settings = spi::Settings {
-    ///     data_order: DataOrder::MostSignificantFirst,
-    ///     clock: SerialClockRate::OscfOver4,
-    ///     // The required SPI mode for communication with the nrf chip is specified in
-    ///     // this crate
-    ///     mode: nrf24_rs::SPI_MODE,
-    /// };
-    /// let (spi, ncs) = spi::Spi::new(dp.SPI, sclk, mosi, miso, ncs, settings);
-    /// let mut delay = hal::delay::Delay::<clock::MHz16>::new();
-    ///
-    /// // Construct a new instance of the chip with a default configuration
-    /// // This will initialize the module and start it up
-    /// let nrf24 = nrf24_rs::Nrf24l01::new(spi, ce, ncs, &mut delay, NrfConfig::default())?;
     ///
     /// ```
+    /// use nrf24::{Nrf24l01, SPI_MODE};
+    /// use nrf24::config::{NrfConfig, PALevel, DataRate};
+    ///
+    /// // Initialize hardware interfaces (platform-specific)
+    /// let spi = setup_spi(SPI_MODE);
+    /// let ce = setup_pin();
+    /// let mut delay = setup_delay();
+    ///
+    /// // Create custom configuration
+    /// let config = NrfConfig::default()
+    ///     .channel(76)
+    ///     .data_rate(DataRate::R2Mbps)
+    ///     .pa_level(PALevel::Low);
+    ///
+    /// // Initialize the nRF24L01 driver
+    /// match Nrf24l01::new(spi, ce, &mut delay, config) {
+    ///     Ok(nrf) => {
+    ///         // Successfully initialized
+    ///         // Continue with nrf.open_reading_pipe(), nrf.start_listening(), etc.
+    ///     },
+    ///     Err(e) => {
+    ///         // Handle initialization error
+    ///         panic!("Failed to initialize nRF24L01: {:?}", e);
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// # Note
+    ///
+    /// The chip requires some settling time after power-up. This function
+    /// includes appropriate delays to ensure reliable initialization.
     pub fn new<D: DelayNs>(
         spi: SPI,
         ce: CE,
@@ -96,7 +115,6 @@ where
             ce,
             config_reg: 0,
             payload_size: PayloadSize::Static(0),
-            tx_buf: [0; MAX_PAYLOAD_SIZE as usize + 1],
         };
 
         // Set the output pin to the correct levels
@@ -281,6 +299,57 @@ where
     pub fn data_available(&mut self) -> NrfResult<bool, SPI, CE> {
         Ok(self.data_available_on_pipe()?.is_some())
     }
+    /// Asynchronously waits until data is available to be read.
+    ///
+    /// This function will yield control to the executor until data becomes available
+    /// via an interrupt signal, making it more power-efficient than polling.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Setup the chip with interrupt pin
+    /// let irq_pin = setup_interrupt_pin();
+    /// chip.set_interrupts(Interrupts::new().data_ready())?;
+    ///
+    /// // Wait for data in an async context
+    /// async fn receive_data(chip: &mut Nrf24l01<SPI, CE>) -> Result<(), Error> {
+    ///     // Await until data is available
+    ///     chip.data_available_async().await?;
+    ///     
+    ///     // Read the available data
+    ///     let mut buffer = [0u8; 32];
+    ///     let bytes_read = chip.read(&mut buffer)?;
+    ///     // Process the data...
+    ///     Ok(())
+    /// }
+    /// ```
+    ///
+    /// # Notes
+    ///
+    /// * Requires the chip to be configured with the data_ready interrupt enabled
+    /// * The IRQ pin must be connected to a GPIO that can generate interrupts
+    /// * You must call `set_interrupts(Interrupts::new().data_ready())` before using this function
+    #[cfg(feature = "async")]
+    pub async fn data_available_async<IRQ>(&mut self, irq: &mut IRQ) -> NrfResult<bool, SPI, CE>
+    where
+        IRQ: embedded_hal_async::digital::Wait,
+    {
+        if self.data_available()? {
+            return Ok(true);
+        }
+        loop {
+            irq.wait_for_low()
+                .await
+                .map_err(|_| TransceiverError::InterruptWaitFailed)?;
+
+            if self
+                .interrupt_src()?
+                .contains(crate::status::InterruptKind::RxDataReady)
+            {
+                return Ok(true);
+            }
+        }
+    }
 
     /// Returns the data pipe where the data is available and `None` if no data available.
     ///
@@ -316,7 +385,7 @@ where
     /// // We will be receiving float values
     /// // Set the payload size to 4 bytes, the size of an f32
     /// let config = NrfConfig::default().payload_size(PayloadSize::Static(4));
-    /// let chip = Nrf24l01::new(spi, ce, ncs, &mut delay, config).unwrap();
+    /// let chip = Nrf24l01::new(spi, ce, &mut delay, config).unwrap();
     /// // Put the chip in listening mode
     /// chip.open_reading_pipe(DataPipe::DP0, b"Node1");
     /// chip.start_listening();
@@ -342,21 +411,27 @@ where
     /// }
     /// ```
     pub fn read(&mut self, buf: &mut [u8]) -> NrfResult<usize, SPI, CE> {
-        let len = if let PayloadSize::Static(n) = self.payload_size {
-            n as usize
-        } else {
-            core::cmp::min(buf.len(), MAX_PAYLOAD_SIZE as usize)
+        let len = match self.payload_size {
+            PayloadSize::Static(n) => {
+                // Ensure buffer is large enough
+                if buf.len() < n as usize {
+                    return Err(TransceiverError::BufferTooSmall {
+                        required: n,
+                        actual: buf.len() as u8,
+                    });
+                }
+                n as usize
+            }
+            PayloadSize::Dynamic => core::cmp::min(buf.len(), MAX_PAYLOAD_SIZE as usize),
         };
 
-        // Use tx buffer to copy the values into
-        // First byte will be the opcode
-        self.tx_buf[0] = Instruction::RRX.opcode();
         // Write to spi
-        let r = self.spi_transfer_tx_buf(len)?;
-        // Transfer the data read to buf.
-        // Skip first byte because it contains the command.
-        // Make sure both slices are the same length, otherwise `copy_from_slice` panics.
-        buf[..len].copy_from_slice(&r[1..=len]);
+        self.spi
+            .transaction(&mut [
+                Operation::Write(&[Instruction::RRX.opcode()]),
+                Operation::Read(&mut buf[..len]),
+            ])
+            .map_err(TransceiverError::Spi)?;
 
         Ok(len)
     }
@@ -368,7 +443,7 @@ where
     /// // We will be sending float values
     /// // Set the payload size to 4 bytes, the size of an f32
     /// let config = NrfConfig::default().payload_size(PayloadSize::Static(4));
-    /// let chip = Nrf24l01::new(spi, ce, ncs, &mut delay, config).unwrap();
+    /// let chip = Nrf24l01::new(spi, ce, &mut delay, config).unwrap();
     /// // Put the chip in transmission mode
     /// chip.open_writing_pipe(b"Node1");
     /// chip.stop_listening();
@@ -394,26 +469,24 @@ where
     /// Will clear all interrupt flags after write.
     /// Returns an error when max retries have been reached.
     pub fn write<D: DelayNs>(&mut self, delay: &mut D, buf: &[u8]) -> NrfResult<(), SPI, CE> {
-        let send_count = if let PayloadSize::Static(n) = self.payload_size {
-            let n = n as usize;
-            // we have to send `n` bytes
-            let len = core::cmp::min(buf.len(), n);
-            self.tx_buf[1..=len].copy_from_slice(&buf[..len]);
-            if len < MAX_PAYLOAD_SIZE as usize {
-                self.tx_buf[len + 1..=n].fill(0);
+        let send_count = match self.payload_size {
+            PayloadSize::Static(n) => {
+                // we have to send `n` bytes
+                if buf.len() < n as usize {
+                    return Err(TransceiverError::BufferTooSmall {
+                        required: n,
+                        actual: buf.len() as u8,
+                    });
+                }
+                n as usize
             }
-            // now our tx_buf is guarantueed to have `n` bytes filled
-            n
-        } else {
-            // In dynamic payload mode, max payload_size is the limit
-            core::cmp::min(buf.len(), MAX_PAYLOAD_SIZE as usize)
+            PayloadSize::Dynamic => {
+                // In dynamic payload mode, max payload_size is the limit
+                core::cmp::min(buf.len(), MAX_PAYLOAD_SIZE as usize)
+            }
         };
 
-        // Add instruction to buffer
-        self.tx_buf[0] = Instruction::WTX.opcode();
-        // Write to TX FIFO
-        let r = self.spi_transfer_tx_buf(send_count)?;
-        let status = Status::from(r[0]);
+        let status = self.send_command_bytes(Instruction::WTX, &buf[..send_count])?;
 
         // Start transmission:
         // pulse CE pin to signal transmission start
@@ -422,7 +495,7 @@ where
         self.set_ce_low()?;
 
         // Clear interrupt flags
-        self.write_register(Register::STATUS, Status::flags().value())?;
+        self.write_register(Register::STATUS, Interrupts::all().raw())?;
 
         // Max retries exceeded
         if status.reached_max_retries() {
@@ -466,7 +539,7 @@ where
     /// # Examples
     /// ```rust
     /// // Initialize the chip
-    /// let mut chip = Nrf24l01::new(spi_struct, ce_pin, ncs_pin, delay, NrfConfig::default())?;
+    /// let mut chip = Nrf24l01::new(spi_struct, ce_pin, delay, NrfConfig::default())?;
     ///
     /// let retries_config = chip.retries()?;
     /// // Default values for the chip
@@ -498,7 +571,7 @@ where
     /// # Examples
     /// ```rust
     /// // Initialize the chip
-    /// let mut chip = Nrf24l01::new(spi_struct, ce_pin, ncs_pin, delay, NrfConfig::default())?;
+    /// let mut chip = Nrf24l01::new(spi_struct, ce_pin, delay, NrfConfig::default())?;
     /// // Default is channel 76
     /// assert_eq!(chip.channel()?, 76);
     /// ```
@@ -529,7 +602,7 @@ where
     /// # Examples
     /// ```rust
     /// // Initialize the chip
-    /// let mut chip = Nrf24l01::new(spi_struct, ce_pin, ncs_pin, delay, NrfConfig::default())?;
+    /// let mut chip = Nrf24l01::new(spi_struct, ce_pin, delay, NrfConfig::default())?;
     /// // Default is 2 Mb/s
     /// assert_eq!(chip.data_rate()?, DataRate::R2Mbps);
     /// ```
@@ -542,7 +615,7 @@ where
     /// # Examples
     /// ```rust
     /// // Initialize the chip
-    /// let mut chip = Nrf24l01::new(spi_struct, ce_pin, ncs_pin, delay, NrfConfig::default())?;
+    /// let mut chip = Nrf24l01::new(spi_struct, ce_pin, delay, NrfConfig::default())?;
     /// // Default is Min PALevel
     /// assert_eq!(chip.power_amp_level()?, PALevel::Min);
     /// ```
@@ -653,7 +726,7 @@ where
     /// # Examples
     /// ```rust
     /// // Initialize chip
-    /// let mut chip = Nrf24l01::new(spi_struct, ce_pin, ncs_pin, delay, NrfConfig::default())?;
+    /// let mut chip = Nrf24l01::new(spi_struct, ce_pin, delay, NrfConfig::default())?;
     /// // Default payload size is MAX_PAYLOAD_SIZE
     /// assert_eq!(chip.payload_size()?, PayloadSize::Static(MAX_PAYLOAD_SIZE));
     /// ```
@@ -719,25 +792,35 @@ where
         self.write_register(Register::STATUS, Self::STATUS_RESET)
     }
 
-    /// Sets the selected interrupt flags.
+    /// Masks the selected interrupt flags.
     ///
-    /// Configures which events will trigger the IRQ pin to active low.
+    /// By default, the IRQ pin will pull low when one of the following events occur:
+    /// - Maximum number of retries is reached
+    /// - Transmission data is sent
+    /// - Receiver data is avaiable to be read
+    ///
+    /// This function allows you to disable these interrupts.
+    ///
+    /// # Note
+    /// Masking an interrupt doesn't prevent the event from occurring or prevent the status flag from being set.
+    /// It only prevents the external IRQ pin from triggering.
+    /// You can still read the status register to see if the event occurred, even if the interrupt is masked.
     ///
     /// # Examples
     /// ```rust
-    /// let interrupts = Interrupts::new().transmission_fail().transmission_ok();
-    /// chip.set_interrupts(interrupts)?;
+    /// let interrupts = Interrupts::new().max_retries().rx_data_ready();
+    /// chip.mask_interrupts(interrupts)?;
     /// ```
-    /// Enable all interrupts.
+    /// Disable all interrupts.
     /// ```rust
     /// let interrupts = Interrupts::all();
-    /// chip.set_interrupt(interrupts);
+    /// chip.mask_interrupt(interrupts);
     /// ```
-    pub fn set_interrupts(&mut self, irq: Interrupts) -> NrfResult<(), SPI, CE> {
+    pub fn mask_interrupts(&mut self, irq: Interrupts) -> NrfResult<(), SPI, CE> {
         // Clear interrupt flags
-        self.config_reg &= !Interrupts::all().value();
-        // Set configured interrupt flags
-        self.config_reg |= irq.value();
+        self.config_reg &= !Interrupts::all().raw();
+        // Set configured interrupt mask
+        self.config_reg |= irq.raw();
         self.write_register(Register::STATUS, self.config_reg)?;
         Ok(())
     }
@@ -748,16 +831,12 @@ where
     pub fn interrupt_src(&mut self) -> NrfResult<Interrupts, SPI, CE> {
         let status = self.status()?;
         // Clear flags
-        self.write_register(Register::STATUS, Interrupts::all().value())?;
-        Ok(Interrupts::from(status.value()))
+        self.write_register(Register::STATUS, Interrupts::all().raw())?;
+        Ok(Interrupts::from(status.raw()))
     }
 
     /// Reads the config from the device and returns it in a `NrfConfig` struct.
     /// Can be used to log the configuration when using `defmt` feature.
-    ///
-    /// # Example
-    /// ```rust
-    /// ```
     pub fn read_config(&mut self) -> NrfResult<NrfConfig, SPI, CE> {
         let addr_width = AddressWidth::from_register(self.read_register(Register::SETUP_AW)?);
         let config = NrfConfig::default()
@@ -771,52 +850,6 @@ where
         Ok(config)
     }
 
-    /*
-    /// Returns a debug struct for printing information regarding current setup
-    ///
-    /// # Example
-    /// ```rust
-    /// ```
-    pub fn debug_view(&mut self) -> NrfResult<crate::config::DebugInfo, SPI, CE> {
-        let channel = self.channel()?;
-        let data_rate = self.data_rate()?;
-        let pa_level = self.power_amp_level()?;
-        // doesn't read actual payload TODO: fix
-        let payload_size = self.payload_size();
-        let crc_encoding_scheme = self.crc_encoding_scheme()?;
-        let retry_setup = self.retries()?;
-
-        let config_reg = self.read_register(Register::CONFIG)?;
-        let mode = if config_reg & 1 == 0 {
-            Mode::TransmissionMode
-        } else {
-            Mode::ReceiverMode
-        };
-
-        let addr_width = AddressWidth::from_register(self.read_register(Register::SETUP_AW)?);
-
-        let tx_addr = self.read_tx()?;
-        let rx1_addr = self.read_rx()?;
-        let auto_ack = self.read_register(Register::EN_AA)?;
-        let open_read_pipes = self.read_register(Register::EN_RXADDR)?;
-
-        Ok(crate::config::DebugInfo {
-            channel,
-            data_rate,
-            pa_level,
-            crc_encoding_scheme,
-            payload_size,
-            retry_setup,
-            mode,
-            addr_width,
-            tx_addr,
-            auto_ack,
-            open_read_pipes,
-            rx1_addr,
-        })
-    }
-    */
-
     /// Sends an instruction over the SPI bus without extra data.
     ///
     /// Returns the status recieved from the device.
@@ -825,23 +858,19 @@ where
         self.send_command_bytes(instruction, &[])
     }
 
-    // Sends an instruction with some payload data over the SPI bus
-    //
-    // Returns the status from the device
     fn send_command_bytes(
         &mut self,
         instruction: Instruction,
         buf: &[u8],
     ) -> NrfResult<Status, SPI, CE> {
-        // Use tx buffer to copy the values into
-        // First byte will be the opcode
-        self.tx_buf[0] = instruction.opcode();
-        self.tx_buf[1..=buf.len()].copy_from_slice(buf);
-        // Write to spi
-        let r = self.spi_transfer_tx_buf(buf.len())?;
-        let status = Status::from(r[0]);
-
-        Ok(status)
+        let mut status_buf = [instruction.opcode()];
+        self.spi
+            .transaction(&mut [
+                Operation::TransferInPlace(&mut status_buf),
+                Operation::Write(buf),
+            ])
+            .map_err(TransceiverError::Spi)?;
+        Ok(Status::from(status_buf[0]))
     }
 
     /// Writes values to a given register.
@@ -855,47 +884,23 @@ where
         register: Register,
         buf: T,
     ) -> NrfResult<(), SPI, CE> {
-        let buf = buf.into_buf();
-        // Use tx buffer to copy the values into
-        // First byte will be the opcode
-        self.tx_buf[0] = Instruction::WR.opcode() | register.addr();
-        // Copy over the values
-        self.tx_buf[1..=buf.len()].copy_from_slice(buf);
-        // Write to spi
-        self.spi_write_tx_buf(buf.len())?;
-
-        Ok(())
+        self.spi
+            .transaction(&mut [
+                Operation::Write(&[Instruction::WR.opcode() | register.addr()]),
+                Operation::Write(buf.into_buf()),
+            ])
+            .map_err(TransceiverError::Spi)
     }
 
     fn read_register(&mut self, register: Register) -> NrfResult<u8, SPI, CE> {
-        self.tx_buf[..2].copy_from_slice(&[Instruction::RR.opcode() | register.addr(), 0]);
-        let reg = self.spi_transfer_tx_buf(1)?[1];
-        Ok(reg)
-    }
-
-    fn read_tx(&mut self) -> NrfResult<[u8; 5], SPI, CE> {
-        self.tx_buf[0] = Instruction::RR.opcode() | Register::TX_ADDR.addr();
-        self.tx_buf[1..=Self::MAX_ADDR_WIDTH].copy_from_slice(&[0; 5]);
-        // Write to spi
-        let r = self.spi_transfer_tx_buf(Self::MAX_ADDR_WIDTH)?;
-        // Transfer the data read to buf.
-        // Skip first byte because it contains the command.
-        // Make both slices are the same length, otherwise `copy_from_slice` panics.
-        let mut buf = [0; 5];
-        buf.copy_from_slice(&r[1..=5]);
-        Ok(buf)
-    }
-    fn read_rx(&mut self) -> NrfResult<[u8; 5], SPI, CE> {
-        self.tx_buf[0] = Instruction::RR.opcode() | Register::RX_PW_P1.addr();
-        self.tx_buf[1..=Self::MAX_ADDR_WIDTH].copy_from_slice(&[0; 5]);
-        // Write to spi
-        let r = self.spi_transfer_tx_buf(Self::MAX_ADDR_WIDTH)?;
-        // Transfer the data read to buf.
-        // Skip first byte because it contains the command.
-        // Make both slices are the same length, otherwise `copy_from_slice` panics.
-        let mut buf = [0; 5];
-        buf.copy_from_slice(&r[1..=5]);
-        Ok(buf)
+        let mut buf = [0_u8];
+        self.spi
+            .transaction(&mut [
+                Operation::Write(&[Instruction::RR.opcode() | register.addr()]),
+                Operation::Read(&mut buf),
+            ])
+            .map_err(TransceiverError::Spi)?;
+        Ok(buf[0])
     }
 
     fn setup_rf(&mut self, data_rate: DataRate, level: PALevel) -> NrfResult<(), SPI, CE> {
@@ -922,86 +927,6 @@ where
         self.ce.set_low().map_err(TransceiverError::Ce)
     }
 }
-
-/// Helper function for transfering data over the SPI bus.
-/// Returns the error enum defined in this crate, so the rest of the code can use the
-/// `?` operator.
-impl<SPI, CE> Nrf24l01<SPI, CE>
-where
-    SPI: SpiDevice,
-    CE: OutputPin,
-{
-    /// *NOTE*
-    /// Make sure the data to be transfered is copied to the TX Buf before calling this function.
-    /// Because the first byte always has to be the command, the `len` argument
-    /// is the inclusive length.
-    fn spi_transfer_tx_buf(&mut self, len: usize) -> NrfResult<&[u8], SPI, CE> {
-        self.spi
-            .transfer_in_place(&mut self.tx_buf[..=len])
-            .map_err(TransceiverError::Spi)?;
-        Ok(&self.tx_buf)
-    }
-    /// *NOTE*
-    /// Make sure the data to be written is copied to the TX Buf before calling this function.
-    /// Because the first byte always has to be the command, the `len` argument
-    /// is the inclusive length.
-    fn spi_write_tx_buf(&mut self, len: usize) -> NrfResult<(), SPI, CE> {
-        self.spi
-            .write(&self.tx_buf[..=len])
-            .map_err(TransceiverError::Spi)
-    }
-}
-
-impl<SPI, CE> fmt::Debug for Nrf24l01<SPI, CE>
-where
-    SPI: fmt::Debug,
-    CE: fmt::Debug,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Nrf24l01")
-            .field("spi", &self.spi)
-            .field("ce", &self.ce)
-            .field("config_reg", &self.config_reg)
-            //.field("payload_size", &self.payload_size)
-            .field("tx_buf", &&self.tx_buf[1..])
-            .finish()
-    }
-}
-
-/*
-#[cfg(feature = "micro-fmt")]
-impl<SPI, CE, NCS, SPIErr, PinErr> Nrf24l01<SPI, CE, NCS>
-where
-    PinErr: core::fmt::Debug,
-    SPIErr: core::fmt::Debug,
-    SPI: Transfer<u8, Error = SPIErr> + Write<u8, Error = SPIErr>,
-    NCS: OutputPin<Error = PinErr>,
-    CE: OutputPin<Error = PinErr>,
-{
-    /// Write debug information to formatter.
-    pub fn debug_write<W: ?Sized>(
-        &mut self,
-        f: &mut ufmt::Formatter<'_, W>,
-    ) -> core::result::Result<(), W::Error>
-    where
-        W: ufmt::uWrite,
-    {
-        f.debug_struct("NRF Configuration")?
-            .field("channel", &self.channel().unwrap())?
-            .field("frequency", &(self.channel().unwrap() as u16 + 2400))?
-            .field("data rate", &self.data_rate().unwrap())?
-            .field(
-                "power amplification level",
-                &self.power_amp_level().unwrap(),
-            )?
-            //.field("crc encoding scheme", &self.enco().unwrap())?
-            //.field("address length", &self.set_address_width)
-            .field("payload size", &self.payload_size())?
-            .field("auto retransmission", &self.retries().unwrap())?
-            .finish()
-    }
-}
-*/
 
 /// A trait representing a type that can be turned into a buffer.
 ///

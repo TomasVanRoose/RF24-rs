@@ -1,20 +1,22 @@
+//! # `nrf24_rs`
+//!
 //! This crate provides a platform agnostic Rust driver for the nRF24L01+ single chip 2.4 GHz
 //! transceiver by Nordic Semiconduct for communicating data wirelessly using the [`embedded-hal`] traits.
 //!
 //! [`embedded-hal`]: https://github.com/rust-embedded/embedded-hal
 //!
-//! # Usage
+//! ## Usage
 //!
 //! This crate can be used by adding `nrf24-rs` to your dependencies in your project's `Cargo.toml`.
 //!
 //! ```toml
 //! [dependencies]
-//! nrf24-rs = "0.1"
+//! nrf24-rs = "0.2"
 //! ```
 //!
-//! # Overview
+//! ## Examples
 //!
-//! # Example: Sending data
+//! ### Sending data
 //! This simple example will send a simple "Hello world" message.
 //! ```rust
 //! use panic_halt as _;
@@ -79,7 +81,7 @@
 //! ```
 //!
 //!
-//! # Example: Reading data
+//! ### Reading data
 //! This simple example will read a "Hello world" message.
 //! ```rust
 //! use panic_halt as _;
@@ -149,9 +151,10 @@
 //! }
 //! ```
 //!
-//! # Feature-flags
+//! ## Feature-flags
 //!
-//! - **micro-fmt:** provides a `uDebug` implementation from the [ufmt crate](https://docs.rs/ufmt) for all public structs and enums.
+//! - **defmt** provides a `defmt::Format` implementation from the [defmt crate](https://docs.rs/defmt) for all public structs and enums.
+//! - **async** provides an async api.
 #![warn(
     missing_docs,
     missing_copy_implementations,
@@ -159,19 +162,16 @@
     trivial_numeric_casts
 )]
 #![no_std]
-extern crate embedded_hal as hal;
-use hal::spi;
 
 pub mod config;
-mod error;
+pub mod error;
 mod nrf24;
 mod register_acces;
 pub mod status;
 
-pub use crate::error::TransceiverError;
 pub use crate::nrf24::Nrf24l01;
 
 /// SPI mode. Use this when initializing the SPI instance.
-pub const SPI_MODE: spi::Mode = spi::MODE_0;
+pub const SPI_MODE: embedded_hal::spi::Mode = embedded_hal::spi::MODE_0;
 /// Max size in bytes of a single payload to be sent or recieved.
 pub const MAX_PAYLOAD_SIZE: u8 = 32;

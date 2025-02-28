@@ -31,7 +31,7 @@ const MAX_CHANNEL: u8 = 125;
 ///
 /// let config = NrfConfig::default();
 ///
-/// let mut chip = Nrf24l01::new(spi, ce, ncs, delay, config)?;
+/// let mut chip = Nrf24l01::new(spi, ce, delay, config)?;
 /// ```
 ///
 /// # Example: custom configuration
@@ -49,7 +49,7 @@ const MAX_CHANNEL: u8 = 125;
 ///     .ack_payloads_enabled(true)
 ///     .auto_retry((15, 15));
 ///
-/// let mut chip = Nrf24l01::new(spi, ce, ncs, delay, config)?;
+/// let mut chip = Nrf24l01::new(spi, ce, delay, config)?;
 /// ```
 #[derive(Copy, Clone)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -117,7 +117,7 @@ impl Default for NrfConfig {
             channel: 76,
             payload_size: PayloadSize::default(),
             addr_width: AddressWidth::default(),
-            crc_encoding_scheme: EncodingScheme::R2Bytes,
+            crc_encoding_scheme: EncodingScheme::default(),
             pa_level: PALevel::default(),
             data_rate: DataRate::default(),
             ack_payloads_enabled: false,
@@ -263,6 +263,12 @@ pub enum EncodingScheme {
     R1Byte = 0b0000_1000,
     /// 2 bytes
     R2Bytes = 0b0000_1100,
+}
+
+impl Default for EncodingScheme {
+    fn default() -> Self {
+        Self::R2Bytes
+    }
 }
 
 impl EncodingScheme {
@@ -488,50 +494,3 @@ impl Into<Register> for DataPipe {
         }
     }
 }
-
-/*
-#[derive(Copy, Clone)]
-pub(crate) enum Mode {
-    TransmissionMode,
-    ReceiverMode,
-}
-
-#[derive(Copy, Clone)]
-pub struct DebugInfo {
-    pub(crate) channel: u8,
-    pub(crate) data_rate: DataRate,
-    pub(crate) pa_level: PALevel,
-    pub(crate) crc_encoding_scheme: EncodingScheme,
-    pub(crate) payload_size: PayloadSize,
-    pub(crate) retry_setup: AutoRetransmission,
-    pub(crate) mode: Mode,
-    pub(crate) addr_width: AddressWidth,
-    pub(crate) tx_addr: [u8; 5],
-    pub(crate) rx1_addr: [u8; 5],
-    pub(crate) auto_ack: u8,
-    pub(crate) open_read_pipes: u8,
-}
-
-impl core::fmt::Debug for DebugInfo {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("Nrf24l01")
-            .field("channel", &self.channel)
-            .field("frequency", &(self.channel as u16 + 2400))
-            .field("data_rate", &self.data_rate)
-            .field("pa_level", &self.pa_level)
-            .field("crc_encoding_scheme", &self.crc_encoding_scheme)
-            .field("payload_size", &self.payload_size)
-            .field("retry_setup", &self.retry_setup)
-            .field("mode", &self.mode)
-            .field("address_width", &self.addr_width)
-            .field("tx_address", &format_args!("{:x?}", &self.tx_addr))
-            .field("rx1_address", &format_args!("{:x?}", &self.rx1_addr))
-            .field("auto_ack_channels", &format_args!("{:06b}", self.auto_ack))
-            .field(
-                "enabled_rx_addresses",
-                &format_args!("{:06b}", self.open_read_pipes),
-            )
-            .finish()
-    }
-}
-*/
