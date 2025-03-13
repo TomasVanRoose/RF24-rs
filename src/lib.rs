@@ -137,7 +137,6 @@
 //! ## Feature-flags
 //!
 //! - **defmt** provides a `defmt::Format` implementation from the [defmt crate](https://docs.rs/defmt) for all public structs and enums.
-//! - **async** provides an async api.
 #![warn(
     missing_docs,
     missing_copy_implementations,

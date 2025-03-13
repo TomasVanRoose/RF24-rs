@@ -44,10 +44,4 @@ pub enum TransceiverError<SpiErr, CeErr> {
         /// The actual buffer size that was provided
         actual: u8,
     },
-
-    /// An error occurred while waiting for an interrupt in async mode.
-    ///
-    /// This error is only available when the "async" feature is enabled.
-    #[cfg(feature = "async")]
-    InterruptWaitFailed,
 }

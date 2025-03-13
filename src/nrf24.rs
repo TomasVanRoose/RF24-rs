@@ -299,57 +299,6 @@ where
     pub fn data_available(&mut self) -> NrfResult<bool, SPI, CE> {
         Ok(self.data_available_on_pipe()?.is_some())
     }
-    /// Asynchronously waits until data is available to be read.
-    ///
-    /// This function will yield control to the executor until data becomes available
-    /// via an interrupt signal, making it more power-efficient than polling.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// // Setup the chip with interrupt pin
-    /// let irq_pin = setup_interrupt_pin();
-    /// chip.set_interrupts(Interrupts::new().data_ready())?;
-    ///
-    /// // Wait for data in an async context
-    /// async fn receive_data(chip: &mut Nrf24l01<SPI, CE>) -> Result<(), Error> {
-    ///     // Await until data is available
-    ///     chip.data_available_async().await?;
-    ///     
-    ///     // Read the available data
-    ///     let mut buffer = [0u8; 32];
-    ///     let bytes_read = chip.read(&mut buffer)?;
-    ///     // Process the data...
-    ///     Ok(())
-    /// }
-    /// ```
-    ///
-    /// # Notes
-    ///
-    /// * Requires the chip to be configured with the data_ready interrupt enabled
-    /// * The IRQ pin must be connected to a GPIO that can generate interrupts
-    /// * You must call `set_interrupts(Interrupts::new().data_ready())` before using this function
-    #[cfg(feature = "async")]
-    pub async fn data_available_async<IRQ>(&mut self, irq: &mut IRQ) -> NrfResult<bool, SPI, CE>
-    where
-        IRQ: embedded_hal_async::digital::Wait,
-    {
-        if self.data_available()? {
-            return Ok(true);
-        }
-        loop {
-            irq.wait_for_low()
-                .await
-                .map_err(|_| TransceiverError::InterruptWaitFailed)?;
-
-            if self
-                .interrupt_src()?
-                .contains(crate::status::InterruptKind::RxDataReady)
-            {
-                return Ok(true);
-            }
-        }
-    }
 
     /// Returns the data pipe where the data is available and `None` if no data available.
     ///
