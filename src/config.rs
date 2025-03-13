@@ -16,15 +16,13 @@
 //!
 use crate::register_acces::Register;
 use crate::MAX_PAYLOAD_SIZE;
-#[cfg(feature = "micro-fmt")]
-use ufmt::{uDebug, uWrite, uwrite, Formatter};
 
 const MAX_CHANNEL: u8 = 125;
 
 /// Configuration builder struct for NRF chip.
 ///
 /// Always created with the `default()` method and modified through
-/// the builder pattern.
+/// the builder pattern. See [module level documentation][crate::config] for all the default values.
 ///
 /// # Example: default
 /// ```rust
@@ -33,7 +31,7 @@ const MAX_CHANNEL: u8 = 125;
 ///
 /// let config = NrfConfig::default();
 ///
-/// let mut chip = Nrf24l01::new(spi, ce, ncs, delay, config)?;
+/// let mut chip = Nrf24l01::new(spi, ce, delay, config)?;
 /// ```
 ///
 /// # Example: custom configuration
@@ -47,20 +45,21 @@ const MAX_CHANNEL: u8 = 125;
 ///     .addr_width(3),
 ///     .data_rate(DataRate::R2Mbps)
 ///     .pa_level(PALevel::Max)
-///     .crc_encoding_scheme(None) // disable crc
+///     .crc_encoding_scheme(EncodingScheme::NoRedundancyCheck) // disable crc
 ///     .ack_payloads_enabled(true)
 ///     .auto_retry((15, 15));
 ///
-/// let mut chip = Nrf24l01::new(spi, ce, ncs, delay, config)?;
+/// let mut chip = Nrf24l01::new(spi, ce, delay, config)?;
 /// ```
-#[derive(Copy, Debug, Clone)]
+#[derive(Copy, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct NrfConfig {
     pub(crate) payload_size: PayloadSize,
     pub(crate) channel: u8,
     pub(crate) addr_width: AddressWidth,
     pub(crate) data_rate: DataRate,
     pub(crate) pa_level: PALevel,
-    pub(crate) crc_encoding_scheme: Option<EncodingScheme>,
+    pub(crate) crc_encoding_scheme: EncodingScheme,
     pub(crate) ack_payloads_enabled: bool,
     pub(crate) auto_retry: AutoRetransmission,
 }
@@ -95,9 +94,8 @@ impl NrfConfig {
         self.pa_level = pa_level;
         self
     }
-    /// Set the Cyclic Redundancy Check Encodign Scheme
-    /// None will disable the CRC.
-    pub fn crc_encoding_scheme(mut self, crc_encoding_scheme: Option<EncodingScheme>) -> Self {
+    /// Set the Cyclic Redundancy Check Encoding Scheme
+    pub fn crc_encoding_scheme(mut self, crc_encoding_scheme: EncodingScheme) -> Self {
         self.crc_encoding_scheme = crc_encoding_scheme;
         self
     }
@@ -119,7 +117,7 @@ impl Default for NrfConfig {
             channel: 76,
             payload_size: PayloadSize::default(),
             addr_width: AddressWidth::default(),
-            crc_encoding_scheme: Some(EncodingScheme::R2Bytes),
+            crc_encoding_scheme: EncodingScheme::default(),
             pa_level: PALevel::default(),
             data_rate: DataRate::default(),
             ack_payloads_enabled: false,
@@ -128,33 +126,11 @@ impl Default for NrfConfig {
     }
 }
 
-#[cfg(feature = "micro-fmt")]
-impl uDebug for NrfConfig {
-    fn fmt<W: ?Sized>(&self, f: &mut Formatter<'_, W>) -> core::result::Result<(), W::Error>
-    where
-        W: uWrite,
-    {
-        f.debug_struct("nRF configuration")?
-            .field("channel", &self.channel)?
-            .field("payload size", &self.payload_size)?
-            .field("power amplification level", &self.pa_level)?
-            .field("data rate", &self.data_rate)?
-            .field("auto retransmission", &self.auto_retry)?
-            .field(
-                "acknowledgement payloads enabled",
-                &self.ack_payloads_enabled,
-            )?
-            .field("address width", &self.addr_width)?
-            .field("crc encoding scheme", &self.crc_encoding_scheme)?
-            .finish()
-    }
-}
-
 /// Different RF power levels. The higher the level the bigger range, but the more the current
 /// consumption.
 ///
 /// Defaults to Min.
-#[derive(PartialEq, Eq, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub enum PALevel {
     /// -18 dBm, 7 mA current consumption.
     Min = 0b0000_0000,
@@ -192,34 +168,22 @@ impl From<u8> for PALevel {
         }
     }
 }
-impl core::fmt::Debug for PALevel {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match *self {
-            PALevel::Min => f.write_str("min (-18 dBm)"),
-            PALevel::Low => f.write_str("low (-12 dBm)"),
-            PALevel::High => f.write_str("high (-6 dBm)"),
-            PALevel::Max => f.write_str("max (0 dBm)"),
-        }
-    }
-}
 
-#[cfg(feature = "micro-fmt")]
-impl uDebug for PALevel {
-    fn fmt<W: ?Sized>(&self, f: &mut Formatter<'_, W>) -> core::result::Result<(), W::Error>
-    where
-        W: uWrite,
-    {
+#[cfg(feature = "defmt")]
+impl defmt::Format for PALevel {
+    fn format(&self, fmt: defmt::Formatter) {
         match *self {
-            PALevel::Min => f.write_str("min (-18 dBm)"),
-            PALevel::Low => f.write_str("low (-12 dBm)"),
-            PALevel::High => f.write_str("high (-6 dBm)"),
-            PALevel::Max => f.write_str("max (0 dBm)"),
+            PALevel::Min => defmt::write!(fmt, "min (-18 dBm)"),
+            PALevel::Low => defmt::write!(fmt, "low (-12 dBm)"),
+            PALevel::High => defmt::write!(fmt, "high (-6 dBm)"),
+            PALevel::Max => defmt::write!(fmt, "max (0 dBm)"),
         }
     }
 }
 
 /// Enum representing the payload size.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(PartialEq, Eq, Copy, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum PayloadSize {
     /// The chip will dynamically set the payload size, depending on the message size.
     Dynamic,
@@ -252,23 +216,11 @@ impl From<u8> for PayloadSize {
     }
 }
 
-#[cfg(feature = "micro-fmt")]
-impl uDebug for PayloadSize {
-    fn fmt<W: ?Sized>(&self, f: &mut Formatter<'_, W>) -> core::result::Result<(), W::Error>
-    where
-        W: uWrite,
-    {
-        match *self {
-            Self::Dynamic => f.write_str("dynamic payloads"),
-            Self::Static(n) => uwrite!(f, "{:?} byte static payloads", n),
-        }
-    }
-}
-
 /// Configured speed at which data will be sent.
 ///
 /// Defaults to 2Mpbs.
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Copy, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum DataRate {
     /// 1 Mbps
     R1Mbps = 0b0000_0000,
@@ -301,31 +253,27 @@ impl From<u8> for DataRate {
     }
 }
 
-#[cfg(feature = "micro-fmt")]
-impl uDebug for DataRate {
-    fn fmt<W: ?Sized>(&self, f: &mut Formatter<'_, W>) -> core::result::Result<(), W::Error>
-    where
-        W: uWrite,
-    {
-        match *self {
-            DataRate::R1Mbps => f.write_str("1 Mbps"),
-            DataRate::R2Mbps => f.write_str("2 Mbps"),
-        }
+/// Cyclic Redundancy Check encoding scheme.
+#[derive(Copy, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum EncodingScheme {
+    /// No CRC check
+    NoRedundancyCheck = 0b0000_0000,
+    /// 1 byte
+    R1Byte = 0b0000_1000,
+    /// 2 bytes
+    R2Bytes = 0b0000_1100,
+}
+
+impl Default for EncodingScheme {
+    fn default() -> Self {
+        Self::R2Bytes
     }
 }
 
-/// Cyclic Redundancy Check encoding scheme.
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub enum EncodingScheme {
-    /// 1 byte
-    R1Byte = 0,
-    /// 2 bytes
-    R2Bytes = 1,
-}
-
 impl EncodingScheme {
-    fn bitmask() -> u8 {
-        0b0000_0100
+    pub(crate) fn bitmask() -> u8 {
+        0b0000_1100
     }
 
     pub(crate) fn scheme(&self) -> u8 {
@@ -336,28 +284,16 @@ impl EncodingScheme {
 impl From<u8> for EncodingScheme {
     fn from(t: u8) -> Self {
         match t & Self::bitmask() {
-            0b0000_0000 => Self::R1Byte,
-            0b0000_0100 => Self::R2Bytes,
+            0b0000_0000 => Self::NoRedundancyCheck,
+            0b0000_1000 => Self::R1Byte,
+            0b0000_1100 => Self::R2Bytes,
             _ => unreachable!(),
         }
     }
 }
-
-#[cfg(feature = "micro-fmt")]
-impl uDebug for EncodingScheme {
-    fn fmt<W: ?Sized>(&self, f: &mut Formatter<'_, W>) -> core::result::Result<(), W::Error>
-    where
-        W: uWrite,
-    {
-        match *self {
-            Self::R1Byte => f.write_str("1 byte"),
-            Self::R2Bytes => f.write_str("2 bytes"),
-        }
-    }
-}
-
+///
 /// Address width for the reading and writing pipes.
-#[derive(PartialEq, Eq, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub enum AddressWidth {
     /// 3 bytes
     R3Bytes = 1,
@@ -397,26 +333,13 @@ impl From<u8> for AddressWidth {
     }
 }
 
-impl core::fmt::Debug for AddressWidth {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+#[cfg(feature = "defmt")]
+impl defmt::Format for AddressWidth {
+    fn format(&self, fmt: defmt::Formatter) {
         match *self {
-            Self::R3Bytes => f.write_str("3 bytes"),
-            Self::R4Bytes => f.write_str("4 bytes"),
-            Self::R5Bytes => f.write_str("5 bytes"),
-        }
-    }
-}
-
-#[cfg(feature = "micro-fmt")]
-impl uDebug for AddressWidth {
-    fn fmt<W: ?Sized>(&self, f: &mut Formatter<'_, W>) -> core::result::Result<(), W::Error>
-    where
-        W: uWrite,
-    {
-        match *self {
-            Self::R3Bytes => f.write_str("3 bytes"),
-            Self::R4Bytes => f.write_str("4 bytes"),
-            Self::R5Bytes => f.write_str("5 bytes"),
+            Self::R3Bytes => defmt::write!(fmt, "3 bytes"),
+            Self::R4Bytes => defmt::write!(fmt, "4 bytes"),
+            Self::R5Bytes => defmt::write!(fmt, "5 bytes"),
         }
     }
 }
@@ -431,7 +354,7 @@ impl uDebug for AddressWidth {
 ///
 /// * Auto retransmission delay has a default value of 5, which means `1586 µs`.
 /// * The chip will try to resend a failed message 15 times by default.
-#[derive(PartialEq, Eq, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub struct AutoRetransmission {
     delay: u8,
     count: u8,
@@ -481,29 +404,19 @@ impl From<(u8, u8)> for AutoRetransmission {
     }
 }
 
-impl core::fmt::Debug for AutoRetransmission {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("AutoRetransmission")
-            .field("raw delay value", &self.raw_delay())
-            .field("delay (µs)", &self.delay())
-            .field("count", &self.count())
-            .finish()
+#[cfg(feature = "defmt")]
+impl defmt::Format for AutoRetransmission {
+    fn format(&self, fmt: defmt::Formatter) {
+        defmt::write!(
+            fmt,
+            "AutoRetransmission {{ raw_delay: {=u8}, delay_µs: {=u32}, count: {=u8} }}",
+            &self.raw_delay(),
+            &self.delay(),
+            &self.count(),
+        )
     }
 }
 
-#[cfg(feature = "micro-fmt")]
-impl uDebug for AutoRetransmission {
-    fn fmt<W: ?Sized>(&self, f: &mut Formatter<'_, W>) -> core::result::Result<(), W::Error>
-    where
-        W: uWrite,
-    {
-        f.debug_struct("AutoRetransmission")?
-            .field("raw delay value", &self.raw_delay())?
-            .field("delay (µs)", &self.delay())?
-            .field("count", &self.count())?
-            .finish()
-    }
-}
 /// Representation of the different data pipes through which data can be received.
 ///
 /// An nRF24L01 configured as primary RX (PRX) will be able to receive data trough 6 different data
@@ -522,8 +435,9 @@ impl uDebug for AutoRetransmission {
 /// In the PTX device data pipe 0 is used to received the acknowledgement, and therefore the
 /// receive address for data pipe 0 has to be equal to the transmit address to be able to receive
 /// the acknowledgement.
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Copy, Clone)]
 #[repr(u8)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum DataPipe {
     /// Data pipe 0.
     /// Default pipe with a 40 bit configurable address.
@@ -578,67 +492,5 @@ impl Into<Register> for DataPipe {
             DataPipe::DP4 => Register::RX_ADDR_P4,
             DataPipe::DP5 => Register::RX_ADDR_P5,
         }
-    }
-}
-
-#[cfg(feature = "micro-fmt")]
-impl uDebug for DataPipe {
-    fn fmt<W: ?Sized>(&self, f: &mut Formatter<'_, W>) -> core::result::Result<(), W::Error>
-    where
-        W: uWrite,
-    {
-        match *self {
-            DataPipe::DP0 => f.write_str("data pipe 0"),
-            DataPipe::DP1 => f.write_str("data pipe 1"),
-            DataPipe::DP2 => f.write_str("data pipe 2"),
-            DataPipe::DP3 => f.write_str("data pipe 3"),
-            DataPipe::DP4 => f.write_str("data pipe 4"),
-            DataPipe::DP5 => f.write_str("data pipe 5"),
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-pub(crate) enum Mode {
-    TransmissionMode,
-    ReceiverMode,
-}
-
-#[derive(Copy, Clone)]
-pub struct DebugInfo {
-    pub(crate) channel: u8,
-    pub(crate) data_rate: DataRate,
-    pub(crate) pa_level: PALevel,
-    pub(crate) crc_encoding_scheme: Option<EncodingScheme>,
-    pub(crate) payload_size: PayloadSize,
-    pub(crate) retry_setup: AutoRetransmission,
-    pub(crate) mode: Mode,
-    pub(crate) addr_width: AddressWidth,
-    pub(crate) tx_addr: [u8; 5],
-    pub(crate) rx1_addr: [u8; 5],
-    pub(crate) auto_ack: u8,
-    pub(crate) open_read_pipes: u8,
-}
-
-impl core::fmt::Debug for DebugInfo {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("Nrf24l01")
-            .field("channel", &self.channel)
-            .field("frequency", &(self.channel as u16 + 2400))
-            .field("data_rate", &self.data_rate)
-            .field("pa_level", &self.pa_level)
-            .field("crc_encoding_scheme", &self.crc_encoding_scheme)
-            .field("payload_size", &self.payload_size)
-            .field("retry_setup", &self.retry_setup)
-            .field("mode", &self.mode)
-            .field("address_width", &self.addr_width)
-            .field("tx_address", &format_args!("{:x?}", &self.tx_addr))
-            .field("rx1_address", &format_args!("{:x?}", &self.rx1_addr))
-            .field("auto_ack_channels", &format_args!("{:06b}", self.auto_ack))
-            .field(
-                "enabled_rx_addresses",
-                &format_args!("{:06b}", self.open_read_pipes),
-            )
-            .finish()
     }
 }
