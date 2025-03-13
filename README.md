@@ -21,8 +21,8 @@ This crate can be used by adding `nrf24-rs` to your dependencies in your project
 nrf24-rs = "0.2"
 ```
                                                                                                                                       
-The main driver is created by using the [`Nrf24l01::new`] method, which takes a handle to an
-SpiDevice, a Chip Enable Output Pin and an [`NrfConfig`][config::NrfConfig] instance.
+The main driver is created by using the `Nrf24l01::new` method, which takes a handle to an
+SpiDevice, a Chip Enable Output Pin and an `NrfConfig` instance.
                                                                                                                                       
 ## Examples
                                                                                                                                       
