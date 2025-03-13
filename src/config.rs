@@ -22,7 +22,7 @@ const MAX_CHANNEL: u8 = 125;
 /// Configuration builder struct for NRF chip.
 ///
 /// Always created with the `default()` method and modified through
-/// the builder pattern.
+/// the builder pattern. See [module level documentation][crate::config] for all the default values.
 ///
 /// # Example: default
 /// ```rust

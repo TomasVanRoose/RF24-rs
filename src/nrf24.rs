@@ -407,7 +407,7 @@ where
     ///         }
     ///     }
     ///     // Wait some time before trying again
-    ///     delay.delay_us(50u16);
+    ///     delay.delay_us(50);
     /// }
     /// ```
     pub fn read(&mut self, buf: &mut [u8]) -> NrfResult<usize, SPI, CE> {
@@ -462,7 +462,7 @@ where
     ///         },
     ///     }
     ///     // Wait some time before trying again
-    ///     delay.delay_us(50u16);
+    ///     delay.delay_us(50);
     /// }
     /// ```
     ///
